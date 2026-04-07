@@ -1,0 +1,74 @@
+{
+  "app": {
+    "title": "AZST Yer Istasyonu",
+    "subtitle": "TEKNOFEST A4 Roket Yarismasi"
+  },
+  "nav": {
+    "teamDashboard": "Takim Paneli",
+    "refereeDashboard": "Hakem Paneli",
+    "settings": "Ayarlar"
+  },
+  "connection": {
+    "title": "Baglanti",
+    "status": "Durum",
+    "connected": "Bagli",
+    "disconnected": "Bagli Degil",
+    "connecting": "Baglaniyor",
+    "error": "Hata",
+    "port": "Port",
+    "baudRate": "Baud Hizi",
+    "connect": "Baglan",
+    "disconnect": "Kes",
+    "mockMode": "Simulasyon Modu",
+    "startMock": "Simulasyonu Baslat",
+    "stopMock": "Simulasyonu Durdur",
+    "resetMock": "Simulasyonu Sifirla",
+    "packetsReceived": "Alinan Paketler",
+    "checksumFailures": "Sag Toplam Hatalari",
+    "lastPacket": "Son Paket"
+  },
+  "flightState": {
+    "pad": "Platform",
+    "powered": "Motorlu Ucus",
+    "unpowered": "Motorsuz Ucus",
+    "apogee": "Apoge",
+    "primaryChute": "Ana Parasut",
+    "secondaryChute": "Yedek Parasut",
+    "unknown": "Bilinmeyen"
+  },
+  "telemetry": {
+    "altitude": "Yukseklik",
+    "velocity": "Hiz",
+    "pressure1": "Basinc 1",
+    "pressure2": "Basinc 2",
+    "latitude": "Enlem",
+    "longitude": "Boylam",
+    "timestamp": "Zaman Damgasi",
+    "scientificData": "Bilimsel Veri",
+    "primaryParachute": "Ana Parasut",
+    "secondaryParachute": "Yedek Parasut",
+    "deployed": "Acildi",
+    "notDeployed": "Acilmadi"
+  },
+  "units": {
+    "meters": "m",
+    "metersPerSecond": "m/s",
+    "hectopascals": "hPa",
+    "milliseconds": "ms",
+    "hertz": "Hz"
+  },
+  "dashboard": {
+    "team": {
+      "title": "Takim Paneli",
+      "rawPacketLog": "Ham Paket Kaydi",
+      "systemHealth": "Sistem Sagligi",
+      "diagnostics": "Tani"
+    },
+    "referee": {
+      "title": "Hakem Paneli",
+      "rocketGPS": "Roket GPS",
+      "payloadGPS": "Yuk GPS",
+      "scientificData": "Bilimsel Veri"
+    }
+  }
+}

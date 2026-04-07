@@ -1,0 +1,74 @@
+{
+  "app": {
+    "title": "AZST Ground Station",
+    "subtitle": "TEKNOFEST A4 Rocket Competition"
+  },
+  "nav": {
+    "teamDashboard": "Team Dashboard",
+    "refereeDashboard": "Referee Dashboard",
+    "settings": "Settings"
+  },
+  "connection": {
+    "title": "Connection",
+    "status": "Status",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting",
+    "error": "Error",
+    "port": "Port",
+    "baudRate": "Baud Rate",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "mockMode": "Mock Mode",
+    "startMock": "Start Mock",
+    "stopMock": "Stop Mock",
+    "resetMock": "Reset Mock",
+    "packetsReceived": "Packets Received",
+    "checksumFailures": "Checksum Failures",
+    "lastPacket": "Last Packet"
+  },
+  "flightState": {
+    "pad": "Pad",
+    "powered": "Powered Flight",
+    "unpowered": "Unpowered Flight",
+    "apogee": "Apogee",
+    "primaryChute": "Primary Chute",
+    "secondaryChute": "Secondary Chute",
+    "unknown": "Unknown"
+  },
+  "telemetry": {
+    "altitude": "Altitude",
+    "velocity": "Velocity",
+    "pressure1": "Pressure 1",
+    "pressure2": "Pressure 2",
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "timestamp": "Timestamp",
+    "scientificData": "Scientific Data",
+    "primaryParachute": "Primary Parachute",
+    "secondaryParachute": "Secondary Parachute",
+    "deployed": "Deployed",
+    "notDeployed": "Not Deployed"
+  },
+  "units": {
+    "meters": "m",
+    "metersPerSecond": "m/s",
+    "hectopascals": "hPa",
+    "milliseconds": "ms",
+    "hertz": "Hz"
+  },
+  "dashboard": {
+    "team": {
+      "title": "Team Dashboard",
+      "rawPacketLog": "Raw Packet Log",
+      "systemHealth": "System Health",
+      "diagnostics": "Diagnostics"
+    },
+    "referee": {
+      "title": "Referee Dashboard",
+      "rocketGPS": "Rocket GPS",
+      "payloadGPS": "Payload GPS",
+      "scientificData": "Scientific Data"
+    }
+  }
+}
