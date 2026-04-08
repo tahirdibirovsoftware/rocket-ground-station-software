@@ -75,9 +75,67 @@ Backend (src-tauri/):
 
 ---
 
-## Phase 1 — Rust Binary Parsers & Unit Tests
+## Phase 1 — Rust Binary Parsers & Unit Tests ✓
 
-**Status:** Not started
+**Completed:** 2026-04-08
+**Commit:** `dc571ff`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `RocketAvionicsPacket` struct (36 bytes) with `parse` + `build` | Done |
+| `PayloadScientificPacket` struct (24 bytes) with `parse` + `build` | Done |
+| `FlightState` enum (Pad/Powered/Unpowered/Apogee/PrimaryChute/SecondaryChute) | Done |
+| XOR checksum: `compute`, `validate`, `stamp` functions | Done |
+| Typed error enums (`RocketParseError`, `PayloadParseError`) with `Display` | Done |
+| Serde JSON serialization with `snake_case` flight state names | Done |
+| Little-endian field extraction (`u32`, `f32`, `u8`) | Done |
+| Exhaustive test suite (45 unit tests + 1 doc test) | Done |
+
+### Test Results
+
+| Runner | Tests | Passed | Failed |
+|--------|:-----:|:------:|:------:|
+| cargo test (unit) | 45 | 45 | 0 |
+| cargo test (doc) | 1 | 1 | 0 |
+
+### Test Coverage
+
+| Category | Tests |
+|----------|:-----:|
+| Checksum computation & validation | 8 |
+| Rocket round-trip (all flight states, parachutes, boundaries) | 8 |
+| Rocket error cases (length, start byte, packet ID, checksum, flight state) | 7 |
+| Rocket serialization (JSON round-trip, flight state strings) | 2 |
+| Payload round-trip (boundaries, negatives, extremes) | 5 |
+| Payload error cases (length, start byte, packet ID, checksum) | 6 |
+| Payload serialization | 1 |
+| Cross-protocol (distinct start bytes, mutual rejection) | 4 |
+| FlightState from_u8 (valid + invalid) | 2 |
+| Error Display formatting | 2 |
+
+### Files Created
+
+```
+Backend (src-tauri/src/protocol/):
+  mod.rs              — Module declarations
+  checksum.rs         — XOR checksum compute/validate/stamp
+  rocket_packet.rs    — RocketPacket + FlightState + parser + builder
+  payload_packet.rs   — PayloadPacket + parser + builder
+  tests.rs            — 45 exhaustive tests
+
+Modified:
+  src-tauri/src/lib.rs — Added `pub mod protocol;`
+```
+
+### Key Decisions
+
+- **Manual deserialization** over `#[repr(C, packed)]` — safer, more explicit, no alignment issues
+- **`build_*` functions** — enables round-trip testing and will be reused by the mock data generator (Phase 2)
+- **Typed error enums** — each validation step returns a specific error variant, aiding debugging in the field
+- **`FlightState::from_u8`** returns `Option` — invalid values produce `None`, parsed as `InvalidFlightState` error
+- **`serde(rename_all = "snake_case")`** — JSON output uses `"primary_chute"` not `"PrimaryChute"`, matching frontend TypeScript conventions
 
 ---
 
