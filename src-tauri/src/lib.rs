@@ -4,6 +4,7 @@
 //! Serial port management and IPC events will be added in subsequent phases.
 
 pub mod protocol;
+pub mod mock;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

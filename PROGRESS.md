@@ -139,9 +139,71 @@ Modified:
 
 ---
 
-## Phase 2 — Mock Data Generator
+## Phase 2 — Mock Data Generator ✓
 
-**Status:** Not started
+**Completed:** 2026-04-08
+**Commit:** `6094fa7`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| Flight profile physics (altitude, velocity, pressure, GPS, sensors) | Done |
+| ~180-second simulation: Pad → Powered → Unpowered → Apogee → PrimaryChute → SecondaryChute | Done |
+| GPS coordinate drift from configurable launch site (default: Aksaray) | Done |
+| Barometric pressure via ISA formula (inverse altitude correlation) | Done |
+| Scientific sensor: sinusoidal + deterministic noise | Done |
+| `MockGenerator` with tick-based emission (5 Hz payload, 1 Hz rocket) | Done |
+| `MockState` with atomic start/stop/reset/elapsed controls | Done |
+| `MockPacket` enum (Rocket / Payload) wrapping raw `Vec<u8>` | Done |
+| All generated packets have valid checksums and are fully parseable | Done |
+| 35 new unit tests (80 total across protocol + mock) | Done |
+
+### Test Results
+
+| Runner | Tests | Passed | Failed |
+|--------|:-----:|:------:|:------:|
+| cargo test (unit) | 80 | 80 | 0 |
+| cargo test (doc) | 1 | 1 | 0 |
+
+### Test Coverage
+
+| Category | Tests |
+|----------|:-----:|
+| Flight state timeline progression | 2 |
+| Altitude physics (pad, powered, unpowered, apogee, descent, non-negative) | 6 |
+| Velocity profiles (pad, powered, unpowered, apogee, descent) | 5 |
+| Barometric pressure (sea level, altitude correlation, realistic) | 3 |
+| GPS (launch site, drift) | 2 |
+| Scientific sensor range | 1 |
+| Rocket packet generation + checksum + parachute flags | 2 |
+| Payload packet generation + coordinate offset | 2 |
+| Tick-based emission rates (1 Hz / 5 Hz) | 5 |
+| MockState atomics | 5 |
+| Full 180s flight simulation end-to-end | 1 |
+| Previous Phase 1 tests (protocol) | 46 |
+
+### Files Created
+
+```
+Backend (src-tauri/src/mock/):
+  mod.rs              — Module declarations
+  flight_profile.rs   — Physics simulation (altitude, velocity, pressure, GPS, sensors)
+  generator.rs        — MockGenerator + MockState + MockPacket
+  tests.rs            — 35 mock-specific tests
+
+Modified:
+  src-tauri/src/lib.rs — Added `pub mod mock;`
+```
+
+### Key Decisions
+
+- **Tick-based generation** — 5 Hz base tick (200ms), payload every tick, rocket every 5th tick
+- **Deterministic noise** — scientific sensor uses timestamp bits instead of RNG for reproducible tests
+- **ISA barometric formula** — real atmospheric model ensuring pressure/altitude correlation is realistic
+- **Default launch site: Aksaray, Turkey** (38.3687°N, 34.0370°E) — typical TEKNOFEST launch area
+- **`MockPacket` enum** — unified type for both packet kinds, ready for async channel emission in Phase 4
+- **Atomic `MockState`** — thread-safe controls that will be wrapped as Tauri managed state
 
 ---
 
