@@ -210,7 +210,7 @@ Modified:
 ## Phase 3 — Serial Port Reader & CSV Logger ✓
 
 **Completed:** 2026-04-08
-**Commit:** (pending)
+**Commit:** `73816b1`
 
 ### What was done
 
@@ -283,9 +283,73 @@ Modified:
 
 ---
 
-## Phase 4 — Tauri IPC Bridge
+## Phase 4 — Tauri IPC Bridge ✓
 
-**Status:** Not started
+**Completed:** 2026-04-08
+**Commit:** `7951783`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `AppState` managed state (mock, parser, logger, connection status, cancel token) | Done |
+| `ConnectionStatus` + `ConnectionMode` with Serde JSON serialization | Done |
+| 7 Tauri commands: `list_serial_ports`, `connect_serial`, `disconnect_serial`, `start_mock`, `stop_mock`, `reset_mock`, `get_connection_status` | Done |
+| 3 Tauri events: `rocket-telemetry`, `payload-telemetry`, `connection-status` | Done |
+| `start_mock` spawns async 5 Hz tick loop with event emission | Done |
+| Commands wired into `lib.rs` via `generate_handler![]` | Done |
+| Frontend hooks: `useTauriEvent<T>`, `useRocketTelemetry`, `usePayloadTelemetry`, `useConnectionStatus` | Done |
+| Event names match frontend `IPC_EVENTS` constants (verified by test) | Done |
+| 10 new Rust tests (120 total) + 6 Vitest tests | Done |
+
+### Test Results
+
+| Runner | Tests | Passed | Failed |
+|--------|:-----:|:------:|:------:|
+| cargo test (unit) | 120 | 120 | 0 |
+| cargo test (doc) | 1 | 1 | 0 |
+| Vitest | 6 | 6 | 0 |
+| Compiler warnings | 0 | - | 0 |
+
+### Test Coverage
+
+| Category | Tests |
+|----------|:-----:|
+| ConnectionMode serialization/deserialization | 2 |
+| ConnectionStatus defaults, serialization, null handling | 3 |
+| AppState initialization, stats sync, mock controls | 3 |
+| Event name constants (match frontend) | 1 |
+| Cancel token cross-thread | 1 |
+| Previous tests (protocol + mock + serial + logger) | 111 |
+
+### Files Created
+
+```
+Backend (src-tauri/src/ipc/):
+  mod.rs      — Module declarations
+  state.rs    — AppState, ConnectionStatus, ConnectionMode
+  events.rs   — emit_rocket_telemetry, emit_payload_telemetry, emit_connection_status
+  commands.rs — 7 Tauri command handlers
+  tests.rs    — 10 IPC tests
+
+Frontend (src/shared/hooks/):
+  index.ts                — Barrel export
+  useTauriEvent.ts        — Generic Tauri event listener hook
+  useRocketTelemetry.ts   — Typed rocket telemetry hook
+  usePayloadTelemetry.ts  — Typed payload telemetry hook
+  useConnectionStatus.ts  — Typed connection status hook
+
+Modified:
+  src-tauri/src/lib.rs — Added `pub mod ipc;`, wired all commands + AppState
+```
+
+### Key Decisions
+
+- **`useRef` for handlers** — avoids stale closures in event listeners without re-subscribing
+- **`AppState` with `Mutex`** — Tauri's state system requires `Send + Sync`, Mutex provides interior mutability
+- **Async mock loop via `tauri::async_runtime::spawn`** — uses tokio under the hood, clean cancellation via AtomicBool
+- **Event names as constants** — defined in both Rust (`events.rs`) and TypeScript (`constants.ts`), verified by test
+- **`ConnectionMode` enum** — `disconnected | serial | mock` — serialized as snake_case strings matching frontend expectations
 
 ---
 
