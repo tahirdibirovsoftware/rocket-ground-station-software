@@ -207,9 +207,79 @@ Modified:
 
 ---
 
-## Phase 3 — Serial Port Reader & CSV Logger
+## Phase 3 — Serial Port Reader & CSV Logger ✓
 
-**Status:** Not started
+**Completed:** 2026-04-08
+**Commit:** (pending)
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `FrameParser` state machine (scan → accumulate → validate → emit) | Done |
+| Byte-level framing: scan for `0xAA`/`0xBB`, accumulate N bytes, checksum validate | Done |
+| Handles partial reads, stream corruption, garbage bytes, re-synchronization | Done |
+| `ReaderStats` tracking (packets, checksum failures, framing errors, bytes) | Done |
+| `SerialPortConfig` with builder pattern (path, baud rate, timeout) | Done |
+| Port enumeration via `serialport::available_ports()` with USB metadata | Done |
+| `open_serial_port()` function for real hardware connections | Done |
+| `CsvLogger` with lazy file creation and auto-generated headers | Done |
+| Session-timestamped filenames (`rocket_avionics_YYYYMMDD_HHMMSS.csv`) | Done |
+| Flush-after-every-write for crash safety | Done |
+| 30 new tests (110 total across all modules) | Done |
+
+### Test Results
+
+| Runner | Tests | Passed | Failed |
+|--------|:-----:|:------:|:------:|
+| cargo test (unit) | 110 | 110 | 0 |
+| cargo test (doc) | 1 | 1 | 0 |
+
+### Test Coverage
+
+| Category | Tests |
+|----------|:-----:|
+| FrameParser: single/multi/interleaved packets | 4 |
+| FrameParser: partial reads (split, byte-by-byte) | 2 |
+| FrameParser: garbage/corruption handling | 5 |
+| FrameParser: reset behavior | 2 |
+| SerialPortConfig: defaults, builder, serialization | 3 |
+| Port enumeration safety | 1 |
+| PortInfo serialization | 1 |
+| Integration: mock → FrameParser round-trip | 1 |
+| CsvLogger: single/multi writes (100 packets each) | 4 |
+| CsvLogger: header verification (rocket + payload) | 2 |
+| CsvLogger: file naming, directory creation | 2 |
+| CsvLogger: data integrity read-back | 1 |
+| Integration: mock → parser → CSV pipeline | 1 |
+| Previous tests (protocol + mock) | 81 |
+
+### Files Created
+
+```
+Backend (src-tauri/src/serial/):
+  mod.rs    — Module declarations
+  config.rs — SerialPortConfig + PortInfo + list_available_ports()
+  reader.rs — FrameParser state machine + ParsedPacket + ReaderStats
+  tests.rs  — 17 serial tests + 1 integration test
+
+Backend (src-tauri/src/logger/):
+  mod.rs        — Module declarations
+  csv_writer.rs — CsvLogger with lazy init, headers, flush-per-write
+  tests.rs      — 11 logger tests + 1 pipeline integration test
+
+Modified:
+  src-tauri/Cargo.toml — Added serialport, csv dependencies
+  src-tauri/src/lib.rs — Added `pub mod serial; pub mod logger;`
+```
+
+### Key Decisions
+
+- **State machine `FrameParser`** over stream-level parsing — fully testable without real serial ports
+- **Separate `FrameParser` from async I/O** — the parser works on any `&[u8]`, async wrapping happens in Phase 4
+- **Lazy CSV writers** — files are only created on first packet write, not at logger construction
+- **Flush-after-every-write** — trades throughput for crash safety (mission-critical data)
+- **`serialport` crate directly** — better Linux support and port enumeration than tokio-serial wrapper
 
 ---
 

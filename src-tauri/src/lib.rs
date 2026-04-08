@@ -5,6 +5,8 @@
 
 pub mod protocol;
 pub mod mock;
+pub mod serial;
+pub mod logger;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
