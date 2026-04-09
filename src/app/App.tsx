@@ -1,15 +1,19 @@
+import { Provider } from "react-redux";
 import { BrowserRouter } from "react-router-dom";
+import { store } from "./store";
 import { AppRoutes } from "./routes/AppRoutes";
 
 /**
  * Root application component.
- * Wraps the app in providers (Router, Redux store, i18n — added in later phases).
+ * Wraps the app in providers: Redux store, Router, i18n.
  */
 function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <Provider store={store}>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </Provider>
   );
 }
 

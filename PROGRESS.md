@@ -353,9 +353,65 @@ Modified:
 
 ---
 
-## Phase 5 — Redux Store & Data Layer
+## Phase 5 — Redux Store & Data Layer ✓
 
-**Status:** Not started
+**Completed:** 2026-04-09
+**Commit:** `0d30061`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `CircularBuffer<T>` — O(1) ring buffer with push, toArray, latest, clear | Done |
+| `mapRocketPacket` / `mapPayloadPacket` — Rust snake_case → TS camelCase mappers | Done |
+| `rocketTelemetrySlice` — latest + history (600 cap) + packetCount | Done |
+| `payloadTelemetrySlice` — latest + history (3000 cap) + packetCount | Done |
+| `connectionSlice` — mode, ports, stats, loading, error | Done |
+| Memoized selectors (`createSelector`) per widget: GPS, altitude, velocity, pressure, scientific | Done |
+| `store.ts` with `configureStore` + typed hooks (`useAppDispatch`, `useAppSelector`) | Done |
+| Redux Provider wired into `App.tsx` | Done |
+| 26 new Vitest tests (32 total frontend) | Done |
+
+### Test Results
+
+| Runner | Tests | Passed | Failed |
+|--------|:-----:|:------:|:------:|
+| Vitest | 32 | 32 | 0 |
+| cargo test | 121 | 121 | 0 |
+
+### Files Created
+
+```
+Shared (src/shared/lib/):
+  CircularBuffer.ts  — Generic ring buffer
+  mappers.ts         — Rust → TS packet mappers
+  index.ts           — Barrel export
+  store.test.ts      — 26 tests
+
+Entities (src/entities/):
+  rocket-packet/index.ts
+  rocket-packet/model/rocketTelemetrySlice.ts
+  rocket-packet/model/selectors.ts
+  payload-packet/index.ts
+  payload-packet/model/payloadTelemetrySlice.ts
+  payload-packet/model/selectors.ts
+  connection/index.ts
+  connection/model/connectionSlice.ts
+  connection/model/selectors.ts
+
+App (src/app/):
+  store.ts — configureStore + typed hooks
+
+Modified:
+  src/app/App.tsx — Added Redux Provider
+```
+
+### Key Decisions
+
+- **Array-based history** in Redux (not CircularBuffer) — Immer needs plain arrays for immutable updates; CircularBuffer is available for non-Redux use
+- **`serializableCheck: false`** — disabled for 5 Hz dispatch performance (avoids middleware overhead)
+- **Mappers separate from slices** — keep deserialization logic in shared/lib, slices receive clean data
+- **`createSelector` per widget** — each widget (chart, GPS, summary) gets exactly the data it needs, preventing unnecessary re-renders
 
 ---
 
