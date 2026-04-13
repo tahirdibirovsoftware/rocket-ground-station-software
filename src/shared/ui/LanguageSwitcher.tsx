@@ -10,9 +10,7 @@ import { Globe } from "lucide-react";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
-  { code: "az", label: "AZ" },
   { code: "tr", label: "TR" },
-  { code: "ru", label: "RU" },
 ];
 
 export const LanguageSwitcher = React.memo(function LanguageSwitcher() {

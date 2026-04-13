@@ -600,13 +600,14 @@ Modified:
 ## Phase 10 — i18n, Responsiveness & Final Polish ✓
 
 **Completed:** 2026-04-13
-**Commit:** (pending)
+**Commit:** `6db3646`
 
 ### What was done
 
 | Task | Status |
 |------|--------|
-| `LanguageSwitcher` — compact locale dropdown (en/az/tr/ru) in top bar | Done |
+| `LanguageSwitcher` — compact locale dropdown (en/tr) in top bar | Done |
+| Removed `az` and `ru` locales (per user request) | Done |
 | Responsive CSS: tablet (≤1024px) → 2-col grids, auto-collapse sidebar | Done |
 | Responsive CSS: small (≤768px) → 1-col grids, tighter spacing | Done |
 | Leaflet dark mode: tile brightness/contrast filter, dark zoom controls | Done |
