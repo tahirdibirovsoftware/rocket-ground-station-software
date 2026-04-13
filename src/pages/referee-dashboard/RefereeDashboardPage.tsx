@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { FlightStateHero } from "@widgets/flight-state-hero";
 import { DualGpsPanel } from "@widgets/dual-gps-panel";
 import { ScientificDataPanel } from "@widgets/scientific-data-panel";
+import { TelemetryMap } from "@widgets/map";
 
 /**
  * Referee Dashboard — Clean, high-contrast display for competition judges.
@@ -64,25 +65,8 @@ export function RefereeDashboardPage() {
         {/* Q3: Scientific Data */}
         <ScientificDataPanel />
 
-        {/* Q4: Map (Phase 9 placeholder) */}
-        <div
-          id="map-placeholder"
-          style={{
-            backgroundColor: "var(--color-bg-panel)",
-            border: "1px solid var(--color-border-default)",
-            borderRadius: "var(--radius-panel)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--color-text-muted)",
-            fontSize: "0.75rem",
-            fontFamily: "var(--font-mono)",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-          }}
-        >
-          Map — Phase 9
-        </div>
+        {/* Q4: Map */}
+        <TelemetryMap />
       </div>
     </div>
   );

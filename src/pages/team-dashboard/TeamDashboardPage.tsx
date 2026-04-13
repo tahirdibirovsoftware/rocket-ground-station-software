@@ -1,19 +1,34 @@
 import { useTranslation } from "react-i18next";
+import { Mountain, Zap, Gauge } from "lucide-react";
 import { ConnectionPanel } from "@widgets/connection-panel";
 import { AvionicsSummary } from "@widgets/avionics-summary";
 import { PayloadSummary } from "@widgets/payload-summary";
 import { SystemHealth } from "@widgets/system-health";
 import { FlightTimeline } from "@widgets/flight-timeline";
+import { TelemetryChart } from "@widgets/charts";
+import { TelemetryMap } from "@widgets/map";
+import { useAppSelector } from "@app/store";
+import {
+  selectRocketAltitudeHistory,
+  selectRocketVelocityHistory,
+  selectRocketPressureHistory,
+} from "@entities/rocket-packet";
 
 /**
  * Team Dashboard — Technical diagnostics view for the engineering team.
  *
  * Layout:
  * - Top row: Flight Timeline (full width)
- * - Main grid: Avionics | Payload | Connection + Health
+ * - Main grid: Avionics + Charts | Payload + Map | Connection + Health
  */
 export function TeamDashboardPage() {
   const { t } = useTranslation();
+  const altitudeData = useAppSelector(selectRocketAltitudeHistory);
+  const velocityData = useAppSelector(selectRocketVelocityHistory);
+  const pressureData = useAppSelector(selectRocketPressureHistory);
+
+  // Map pressure data to single-value chart format (pressure1)
+  const pressureChartData = pressureData.map((p) => ({ t: p.t, v: p.p1 }));
 
   return (
     <div
@@ -50,16 +65,45 @@ export function TeamDashboardPage() {
           gap: "0.75rem",
           flex: 1,
           minHeight: 0,
+          overflow: "auto",
         }}
       >
-        {/* Column 1: Rocket avionics */}
+        {/* Column 1: Rocket avionics + Charts */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <AvionicsSummary />
+          <TelemetryChart
+            id="chart-altitude"
+            title={t("telemetry.altitude")}
+            icon={<Mountain size={14} />}
+            data={altitudeData}
+            color="rgb(0, 255, 136)"
+            unit={t("units.meters")}
+            height={160}
+          />
+          <TelemetryChart
+            id="chart-velocity"
+            title={t("telemetry.velocity")}
+            icon={<Zap size={14} />}
+            data={velocityData}
+            color="rgb(255, 170, 0)"
+            unit={t("units.metersPerSecond")}
+            height={160}
+          />
         </div>
 
-        {/* Column 2: Payload scientific */}
+        {/* Column 2: Payload + Pressure chart + Map */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <PayloadSummary />
+          <TelemetryChart
+            id="chart-pressure"
+            title={t("telemetry.pressure1")}
+            icon={<Gauge size={14} />}
+            data={pressureChartData}
+            color="rgb(51, 153, 255)"
+            unit={t("units.hectopascals")}
+            height={160}
+          />
+          <TelemetryMap />
         </div>
 
         {/* Column 3: Connection + Health */}

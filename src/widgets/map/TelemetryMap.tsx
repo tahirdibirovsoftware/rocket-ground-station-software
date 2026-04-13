@@ -1,0 +1,161 @@
+/**
+ * TelemetryMap — Leaflet map showing rocket and payload GPS tracks.
+ *
+ * Configured for offline tile usage (public/tiles/{z}/{x}/{y}.png).
+ * Falls back to OpenStreetMap tiles for development when local tiles
+ * are unavailable.
+ *
+ * Features:
+ * - Rocket marker (red) with descent polyline trail
+ * - Payload marker (blue) with descent polyline trail
+ * - Launch site marker (flag icon)
+ * - Auto-center on latest rocket position
+ */
+import React, { useEffect, useRef } from "react";
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
+import L from "leaflet";
+import { MapPin } from "lucide-react";
+import { PanelContainer } from "@shared/ui";
+import { useAppSelector } from "@app/store";
+import { selectRocketGps, selectRocketHistory } from "@entities/rocket-packet";
+import { selectPayloadGps, selectPayloadHistory } from "@entities/payload-packet";
+
+import "leaflet/dist/leaflet.css";
+
+// Fix Leaflet default icon paths (bundler strips them)
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+const ROCKET_ICON = new L.DivIcon({
+  className: "",
+  html: `<div style="
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #ff3366; border: 2px solid #fff;
+    box-shadow: 0 0 8px rgba(255,51,102,0.6);
+  "></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const PAYLOAD_ICON = new L.DivIcon({
+  className: "",
+  html: `<div style="
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #3399ff; border: 2px solid #fff;
+    box-shadow: 0 0 8px rgba(51,153,255,0.6);
+  "></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+/** Default center: Turkey (competition region). */
+const DEFAULT_CENTER: L.LatLngTuple = [39.92, 32.85];
+
+/** Auto-center the map on the latest rocket position. */
+function MapAutoCenter({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  const didCenter = useRef(false);
+
+  useEffect(() => {
+    if (lat !== 0 && lng !== 0) {
+      if (!didCenter.current) {
+        map.setView([lat, lng], 14);
+        didCenter.current = true;
+      } else {
+        map.panTo([lat, lng], { animate: true, duration: 0.5 });
+      }
+    }
+  }, [map, lat, lng]);
+
+  return null;
+}
+
+export const TelemetryMap = React.memo(function TelemetryMap() {
+  const rocketGps = useAppSelector(selectRocketGps);
+  const payloadGps = useAppSelector(selectPayloadGps);
+  const rocketHistory = useAppSelector(selectRocketHistory);
+  const payloadHistory = useAppSelector(selectPayloadHistory);
+
+  // Build polyline arrays (last 200 points for performance)
+  const rocketTrail: L.LatLngTuple[] = rocketHistory
+    .slice(-200)
+    .filter((p) => p.latitude !== 0 && p.longitude !== 0)
+    .map((p) => [p.latitude, p.longitude]);
+
+  const payloadTrail: L.LatLngTuple[] = payloadHistory
+    .slice(-200)
+    .filter((p) => p.latitude !== 0 && p.longitude !== 0)
+    .map((p) => [p.latitude, p.longitude]);
+
+  return (
+    <PanelContainer
+      id="telemetry-map"
+      title="Map"
+      icon={<MapPin size={14} />}
+    >
+      <div style={{ height: "100%", minHeight: 250, borderRadius: "0.25rem", overflow: "hidden" }}>
+        <MapContainer
+          center={DEFAULT_CENTER}
+          zoom={10}
+          style={{ height: "100%", width: "100%", background: "var(--color-bg-tertiary)" }}
+          attributionControl={false}
+          zoomControl={true}
+        >
+          {/* Offline tiles: public/tiles/{z}/{x}/{y}.png — falls back to OSM */}
+          <TileLayer
+            url="/tiles/{z}/{x}/{y}.png"
+            errorTileUrl="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={18}
+          />
+
+          {/* Auto-center on rocket */}
+          {rocketGps && (
+            <MapAutoCenter lat={rocketGps.lat} lng={rocketGps.lng} />
+          )}
+
+          {/* Rocket trail */}
+          {rocketTrail.length > 1 && (
+            <Polyline
+              positions={rocketTrail}
+              color="#ff3366"
+              weight={3}
+              opacity={0.7}
+              dashArray="6 4"
+            />
+          )}
+
+          {/* Payload trail */}
+          {payloadTrail.length > 1 && (
+            <Polyline
+              positions={payloadTrail}
+              color="#3399ff"
+              weight={3}
+              opacity={0.7}
+              dashArray="6 4"
+            />
+          )}
+
+          {/* Rocket marker */}
+          {rocketGps && rocketGps.lat !== 0 && (
+            <Marker
+              position={[rocketGps.lat, rocketGps.lng]}
+              icon={ROCKET_ICON}
+            />
+          )}
+
+          {/* Payload marker */}
+          {payloadGps && payloadGps.lat !== 0 && (
+            <Marker
+              position={[payloadGps.lat, payloadGps.lng]}
+              icon={PAYLOAD_ICON}
+            />
+          )}
+        </MapContainer>
+      </div>
+    </PanelContainer>
+  );
+});

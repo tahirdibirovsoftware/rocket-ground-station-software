@@ -554,9 +554,46 @@ Modified:
 
 ---
 
-## Phase 9 — Offline Map & Canvas Charting
+## Phase 9 — Offline Map & Canvas Charting ✓
 
-**Status:** Not started
+**Completed:** 2026-04-13
+**Commit:** `1abe3a4`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `TelemetryMap` — Leaflet map with offline tile support + OSM fallback | Done |
+| Rocket marker (red DivIcon) + dashed descent trail polyline | Done |
+| Payload marker (blue DivIcon) + dashed descent trail polyline | Done |
+| Auto-center on rocket GPS (first center, then smooth pan) | Done |
+| `TelemetryChart` — Canvas-based time-series with 60s rolling window | Done |
+| Auto-scaling Y axis, gradient fill, grid lines, axis labels | Done |
+| DPR-aware canvas rendering, resize handler | Done |
+| Team Dashboard: 3 charts (altitude/velocity/pressure) + map | Done |
+| Referee Dashboard: map placeholder replaced with TelemetryMap | Done |
+
+### Files Created
+
+```
+Widgets (src/widgets/):
+  map/TelemetryMap.tsx      — Leaflet map with markers + trails
+  map/index.ts
+  charts/TelemetryChart.tsx — Canvas time-series chart
+  charts/index.ts
+
+Modified:
+  src/pages/team-dashboard/TeamDashboardPage.tsx     — Added 3 charts + map
+  src/pages/referee-dashboard/RefereeDashboardPage.tsx — Replaced placeholder with map
+```
+
+### Key Decisions
+
+- **Offline-first tiles** — `url="/tiles/{z}/{x}/{y}.png"` with `errorTileUrl` fallback to OSM for dev
+- **DivIcon markers** — custom colored dots (red=rocket, blue=payload) with CSS box-shadow glow
+- **Last 200 trail points** — polyline trimmed for performance at high packet rates
+- **Canvas chart, not DOM** — 60s rolling window rendered entirely on canvas (no SVG/DOM mutations)
+- **DPR scaling** — canvas size doubled on Retina displays for crisp rendering
 
 ---
 
