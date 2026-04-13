@@ -471,9 +471,49 @@ Modified:
 
 ---
 
-## Phase 7 — Team Dashboard
+## Phase 7 — Team Dashboard ✓
 
-**Status:** Not started
+**Completed:** 2026-04-13
+**Commit:** `93be99a`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `ConnectionPanel` — serial port inputs, baud rate, connect/disconnect, mock controls | Done |
+| `AvionicsSummary` — flight state badge, altitude/velocity/pressure grid, GPS, parachutes | Done |
+| `PayloadSummary` — payload altitude, scientific data, GPS coordinates | Done |
+| `SystemHealth` — connection mode, packet counts, checksum failures, uptime | Done |
+| `FlightTimeline` — horizontal 6-phase progression bar with glow on current | Done |
+| `TelemetryBridge` — invisible component bridging Tauri events to Redux | Done |
+| `DashboardLayout` — reads connection mode from Redux, embeds TelemetryBridge | Done |
+| `TeamDashboardPage` — full 3-column layout with all widgets | Done |
+
+### Files Created
+
+```
+Widgets (src/widgets/):
+  connection-panel/    — ConnectionPanel.tsx + index.ts
+  avionics-summary/    — AvionicsSummary.tsx + index.ts
+  payload-summary/     — PayloadSummary.tsx + index.ts
+  system-health/       — SystemHealth.tsx + index.ts
+  flight-timeline/     — FlightTimeline.tsx + index.ts
+
+Features (src/features/):
+  telemetry-bridge/    — TelemetryBridge.tsx + index.ts
+
+Modified:
+  src/shared/ui/DashboardLayout.tsx — Reads Redux, embeds TelemetryBridge
+  src/pages/team-dashboard/TeamDashboardPage.tsx — Full widget composition
+```
+
+### Key Decisions
+
+- **TelemetryBridge pattern** — single invisible component at layout level handles all Tauri-to-Redux dispatching
+- **ConnectionPanel invokes IPC** — buttons directly call `invoke()` with typed command names
+- **AvionicsSummary green glow** — panel glows green when chute deployed (visual alert)
+- **FlightTimeline transitions** — 300ms CSS transitions for smooth state changes
+- **3-column grid** — Avionics | Payload | Connection+Health for optimal screen density
 
 ---
 

@@ -18,15 +18,12 @@ import {
 } from "lucide-react";
 import { ROUTES } from "@shared/config/constants";
 import { StatusIndicator, type StatusVariant } from "./StatusIndicator";
+import { useAppSelector } from "@app/store";
+import { selectConnectionMode } from "@entities/connection";
+import { TelemetryBridge } from "@features/telemetry-bridge";
 
-interface DashboardLayoutProps {
-  /** Connection mode from Redux state. */
-  connectionMode?: "disconnected" | "serial" | "mock";
-}
-
-export const DashboardLayout = React.memo(function DashboardLayout({
-  connectionMode = "disconnected",
-}: DashboardLayoutProps) {
+export const DashboardLayout = React.memo(function DashboardLayout() {
+  const connectionMode = useAppSelector(selectConnectionMode);
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const [clock, setClock] = useState(new Date());
@@ -194,6 +191,7 @@ export const DashboardLayout = React.memo(function DashboardLayout({
             minHeight: 0,
           }}
         >
+          <TelemetryBridge />
           <Outlet />
         </main>
       </div>
