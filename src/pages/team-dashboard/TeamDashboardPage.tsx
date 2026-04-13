@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { PanelContainer } from "@shared/ui";
 
 /**
  * Team Dashboard — Technical diagnostics view for the engineering team.
@@ -8,31 +9,19 @@ export function TeamDashboardPage() {
   const { t } = useTranslation();
 
   return (
-    <div
-      id="team-dashboard-page"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-        fontFamily: "var(--font-mono)",
-        color: "var(--color-text-secondary)",
-      }}
-    >
-      <div style={{ textAlign: "center" }}>
-        <h1
+    <div id="team-dashboard-page">
+      <PanelContainer title={t("dashboard.team.title")}>
+        <p
+          className="font-telemetry"
           style={{
-            fontSize: "1.5rem",
-            color: "var(--color-text-primary)",
-            marginBottom: "0.5rem",
+            color: "var(--color-text-secondary)",
+            fontSize: "0.8125rem",
           }}
         >
-          {t("dashboard.team.title")}
-        </h1>
-        <p style={{ fontSize: "0.875rem", color: "var(--color-status-nominal)" }}>
-          {t("app.title")} v0.1.0
+          {t("app.title")} v0.1.0 — {t("dashboard.team.diagnostics")}
         </p>
-      </div>
+      </PanelContainer>
     </div>
   );
 }
+

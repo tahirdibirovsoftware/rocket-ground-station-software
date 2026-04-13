@@ -415,9 +415,59 @@ Modified:
 
 ---
 
-## Phase 6 — Shared UI Foundation
+## Phase 6 — Shared UI Foundation ✓
 
-**Status:** Not started
+**Completed:** 2026-04-13
+**Commit:** `5f7dd70`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `StatusIndicator` — pulsing dot with 5 variants, auto-pulse, configurable size | Done |
+| `PanelContainer` — dark bordered panel with header, icon, glow, headerRight | Done |
+| `TelemetryValue` — labelled mono-spaced readout with 4 size variants | Done |
+| `FlightStateBadge` — color-coded pill badge for all 6 flight states (i18n) | Done |
+| `DataRow` — compact key-value row with mono font, bottom border | Done |
+| `DashboardLayout` — app shell: top status bar + collapsible sidebar + Outlet | Done |
+| Layout wired into AppRoutes via React Router nested routes | Done |
+| Page stubs updated to use PanelContainer within layout | Done |
+| 26 new Vitest tests (58 total frontend) | Done |
+
+### Test Results
+
+| Runner | Tests | Passed | Failed |
+|--------|:-----:|:------:|:------:|
+| Vitest | 58 | 58 | 0 |
+| cargo test | 121 | 121 | 0 |
+
+### Files Created
+
+```
+Shared UI (src/shared/ui/):
+  index.ts            — Barrel export
+  StatusIndicator.tsx  — Pulsing status dot
+  PanelContainer.tsx   — Dark bordered panel
+  TelemetryValue.tsx   — Labelled data readout
+  FlightStateBadge.tsx — Flight phase pill badge
+  DataRow.tsx          — Key-value table row
+  DashboardLayout.tsx  — App shell (top bar + sidebar + Outlet)
+  ui.test.tsx          — 26 component tests
+
+Modified:
+  src/app/routes/AppRoutes.tsx             — Layout route wrapping
+  src/pages/team-dashboard/TeamDashboardPage.tsx     — Uses PanelContainer
+  src/pages/referee-dashboard/RefereeDashboardPage.tsx — Uses PanelContainer
+```
+
+### Key Decisions
+
+- **React.memo on all components** — prevents re-renders from parent telemetry updates
+- **Inline styles (not Tailwind classes)** — components use CSS variables from the design system for consistent theming
+- **Lucide icons only** — no text emojis anywhere (Radio, Activity, Gauge, ChevronLeft/Right)
+- **NavLink active state** — highlights current route with nominal green border
+- **Collapsible sidebar** — saves screen real estate for telemetry widgets
+- **Clock in top bar** — mission elapsed time reference, updates every second
 
 ---
 

@@ -1,11 +1,13 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ROUTES } from "@shared/config/constants";
+import { DashboardLayout } from "@shared/ui";
 import { TeamDashboardPage } from "@pages/team-dashboard/TeamDashboardPage";
 import { RefereeDashboardPage } from "@pages/referee-dashboard/RefereeDashboardPage";
 
 /**
  * Application route definitions.
- * Two primary dashboard views: Team (technical) and Referee (competition).
+ * Both dashboard views are nested inside the DashboardLayout shell
+ * (sidebar + top bar + Outlet).
  */
 export function AppRoutes() {
   return (
@@ -14,14 +16,16 @@ export function AppRoutes() {
         path={ROUTES.ROOT}
         element={<Navigate to={ROUTES.TEAM_DASHBOARD} replace />}
       />
-      <Route
-        path={ROUTES.TEAM_DASHBOARD}
-        element={<TeamDashboardPage />}
-      />
-      <Route
-        path={ROUTES.REFEREE_DASHBOARD}
-        element={<RefereeDashboardPage />}
-      />
+      <Route element={<DashboardLayout />}>
+        <Route
+          path={ROUTES.TEAM_DASHBOARD}
+          element={<TeamDashboardPage />}
+        />
+        <Route
+          path={ROUTES.REFEREE_DASHBOARD}
+          element={<RefereeDashboardPage />}
+        />
+      </Route>
     </Routes>
   );
 }
