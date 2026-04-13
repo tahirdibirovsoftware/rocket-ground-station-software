@@ -7,3 +7,4 @@ export { TelemetryValue } from "./TelemetryValue";
 export { FlightStateBadge } from "./FlightStateBadge";
 export { DataRow } from "./DataRow";
 export { DashboardLayout } from "./DashboardLayout";
+export { LanguageSwitcher } from "./LanguageSwitcher";

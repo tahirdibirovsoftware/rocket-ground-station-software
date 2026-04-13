@@ -136,3 +136,60 @@ body {
 .animate-pulse-critical {
   animation: pulse-critical 1s ease-in-out infinite;
 }
+
+/* ── Leaflet Dark Mode ── */
+.leaflet-container {
+  background: var(--color-bg-tertiary) !important;
+}
+
+.leaflet-tile-pane {
+  filter: brightness(0.7) contrast(1.1) saturate(0.8);
+}
+
+.leaflet-control-zoom a {
+  background-color: var(--color-bg-secondary) !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border-default) !important;
+}
+
+/* ── Responsive: Tablet (≤1024px) ── */
+@media (max-width: 1024px) {
+  #team-dashboard-page > div:last-child,
+  #referee-dashboard-page > div:last-child {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  #sidebar-nav {
+    width: 48px !important;
+  }
+
+  #sidebar-nav span:not([style*="flex-shrink"]) {
+    display: none;
+  }
+}
+
+/* ── Responsive: Small Screen (≤768px) ── */
+@media (max-width: 768px) {
+  #team-dashboard-page > div:last-child,
+  #referee-dashboard-page > div:last-child {
+    grid-template-columns: 1fr !important;
+  }
+
+  #sidebar-nav {
+    width: 40px !important;
+  }
+
+  #main-content {
+    padding: 0.5rem !important;
+  }
+
+  #top-status-bar {
+    height: 36px !important;
+    padding: 0 0.5rem !important;
+  }
+
+  .flight-state-badge {
+    font-size: 0.625rem !important;
+  }
+}
+

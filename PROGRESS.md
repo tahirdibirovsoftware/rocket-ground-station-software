@@ -597,6 +597,30 @@ Modified:
 
 ---
 
-## Phase 10 — i18n, Responsiveness & Final Polish
+## Phase 10 — i18n, Responsiveness & Final Polish ✓
 
-**Status:** Not started
+**Completed:** 2026-04-13
+**Commit:** (pending)
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `LanguageSwitcher` — compact locale dropdown (en/az/tr/ru) in top bar | Done |
+| Responsive CSS: tablet (≤1024px) → 2-col grids, auto-collapse sidebar | Done |
+| Responsive CSS: small (≤768px) → 1-col grids, tighter spacing | Done |
+| Leaflet dark mode: tile brightness/contrast filter, dark zoom controls | Done |
+| All 4 locale files verified in sync (74 lines each) | Done |
+| Language switcher wired into DashboardLayout top status bar | Done |
+
+### Files Created/Modified
+
+```
+Created:
+  src/shared/ui/LanguageSwitcher.tsx — Locale dropdown widget
+
+Modified:
+  src/app/styles/index.css         — Responsive breakpoints + Leaflet dark mode
+  src/shared/ui/DashboardLayout.tsx — LanguageSwitcher added to top bar
+  src/shared/ui/index.ts           — Barrel export updated
+```

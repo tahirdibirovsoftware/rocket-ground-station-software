@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ROUTES } from "@shared/config/constants";
 import { StatusIndicator, type StatusVariant } from "./StatusIndicator";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useAppSelector } from "@app/store";
 import { selectConnectionMode } from "@entities/connection";
 import { TelemetryBridge } from "@features/telemetry-bridge";
@@ -100,6 +101,7 @@ export const DashboardLayout = React.memo(function DashboardLayout() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
           <StatusIndicator variant={statusVariant} label={statusLabel} size={8} />
+          <LanguageSwitcher />
           <span
             className="font-telemetry"
             style={{
