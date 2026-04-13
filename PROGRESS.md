@@ -517,9 +517,40 @@ Modified:
 
 ---
 
-## Phase 8 — Referee Dashboard
+## Phase 8 — Referee Dashboard ✓
 
-**Status:** Not started
+**Completed:** 2026-04-13
+**Commit:** `db219ca`
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| `FlightStateHero` — 2.5rem flight state with text glow, XL altitude/velocity, chute alert | Done |
+| `DualGpsPanel` — side-by-side rocket (red) vs payload (blue) GPS with divider | Done |
+| `ScientificDataPanel` — XL sensor value + canvas sparkline (last 100 points) | Done |
+| `RefereeDashboardPage` — 2x2 quadrant grid, no debug info, max 6 fields visible | Done |
+| Map placeholder for Phase 9 | Done |
+
+### Files Created
+
+```
+Widgets (src/widgets/):
+  flight-state-hero/      — FlightStateHero.tsx + index.ts
+  dual-gps-panel/         — DualGpsPanel.tsx + index.ts
+  scientific-data-panel/  — ScientificDataPanel.tsx + index.ts
+
+Modified:
+  src/pages/referee-dashboard/RefereeDashboardPage.tsx — Full 2x2 grid
+```
+
+### Key Decisions
+
+- **2.5rem + textShadow** — flight state label visible from 3+ meters
+- **Pulsing deployment alert** — green bordered banner with pulse animation on chute deploy
+- **Canvas sparkline** — 100-point gradient-filled chart renders at 5 Hz without DOM mutations
+- **Rocket=red, Payload=blue** — consistent color coding across all panels
+- **No debug info** — zero packet counts, timestamps, or hex on the referee view
 
 ---
 
