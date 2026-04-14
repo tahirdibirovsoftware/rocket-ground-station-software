@@ -1,19 +1,16 @@
 /**
  * ConnectionPanel — Serial port connection controls and mock mode toggle.
  *
- * Provides port selection, baud rate config, connect/disconnect buttons,
- * and mock data generator controls.
+ * Provides hybrid global and independent port connection handlers flawlessly.
  */
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Plug, Unplug, Play, Square, RotateCcw } from "lucide-react";
+import { Plug, Unplug, Play, Square, RotateCcw, AlertCircle } from "lucide-react";
 import { IPC_COMMANDS } from "@shared/config/constants";
 import { PanelContainer, StatusIndicator } from "@shared/ui";
 import { useAppSelector, useAppDispatch } from "@app/store";
 import {
-  selectConnectionMode,
-  selectIsConnected,
   connectionLoading,
   connectionError,
 } from "@entities/connection";
@@ -21,33 +18,113 @@ import {
 export const ConnectionPanel = React.memo(function ConnectionPanel() {
   const { t } = useTranslation();
   const dispatch = useAppDispatch();
-  const mode = useAppSelector(selectConnectionMode);
-  const isConnected = useAppSelector(selectIsConnected);
+  const connState = useAppSelector((state) => state.connection);
 
-  const [rocketPort, setRocketPort] = useState("/dev/ttyUSB0");
-  const [payloadPort, setPayloadPort] = useState("/dev/ttyUSB1");
-  const [baudRate, setBaudRate] = useState("115200");
+  const rocketConnected = !!connState.rocketPort;
+  const payloadConnected = !!connState.payloadPort;
+  const isMock = connState.mode === "mock";
+  const anyConnected = rocketConnected || payloadConnected;
 
-  const handleConnect = useCallback(async () => {
+  const [rocketPortInput, setRocketPortInput] = useState("");
+  const [rocketBaud, setRocketBaud] = useState("115200");
+
+  const [payloadPortInput, setPayloadPortInput] = useState("");
+  const [payloadBaud, setPayloadBaud] = useState("115200");
+
+  const [availablePorts, setAvailablePorts] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchPorts = async () => {
+      try {
+        const ports = await invoke<any[]>(IPC_COMMANDS.LIST_SERIAL_PORTS);
+        if (active) setAvailablePorts(ports || []);
+      } catch (e) {
+        console.error("Failed to list ports", e);
+      }
+    };
+    
+    fetchPorts();
+    const interval = setInterval(fetchPorts, 1500);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const connectRocket = async () => {
+    if (!rocketPortInput) throw new Error("Rocket port not selected");
+    await invoke(IPC_COMMANDS.CONNECT_ROCKET, {
+      port: rocketPortInput,
+      baudRate: parseInt(rocketBaud, 10),
+    });
+  };
+
+  const connectPayload = async () => {
+    if (!payloadPortInput) throw new Error("Payload port not selected");
+    await invoke(IPC_COMMANDS.CONNECT_PAYLOAD, {
+      port: payloadPortInput,
+      baudRate: parseInt(payloadBaud, 10),
+    });
+  };
+
+  const handleGlobalToggle = useCallback(async () => {
     dispatch(connectionLoading());
     try {
-      await invoke(IPC_COMMANDS.CONNECT_SERIAL, {
-        rocketPort,
-        payloadPort,
-        baudRate: parseInt(baudRate, 10),
-      });
-    } catch (e) {
-      dispatch(connectionError(String(e)));
-    }
-  }, [dispatch, rocketPort, payloadPort, baudRate]);
+      if (anyConnected) {
+        // Disconnect all connected
+        if (rocketConnected) await invoke(IPC_COMMANDS.DISCONNECT_ROCKET);
+        if (payloadConnected) await invoke(IPC_COMMANDS.DISCONNECT_PAYLOAD);
+      } else {
+        // Connect all requested
+        const promises = [];
+        if (rocketPortInput) promises.push(connectRocket());
+        if (payloadPortInput) promises.push(connectPayload());
 
-  const handleDisconnect = useCallback(async () => {
-    try {
-      await invoke(IPC_COMMANDS.DISCONNECT_SERIAL);
+        if (promises.length === 0) {
+          dispatch(connectionError("Please select at least one port hardware manually."));
+          return;
+        }
+
+        const results = await Promise.allSettled(promises);
+        const errors = results
+          .filter((r) => r.status === "rejected")
+          .map((r: any) => String(r.reason));
+
+        if (errors.length > 0) {
+          dispatch(connectionError(errors.join(" | ")));
+        }
+      }
     } catch (e) {
       dispatch(connectionError(String(e)));
     }
-  }, [dispatch]);
+  }, [dispatch, rocketConnected, payloadConnected, anyConnected, rocketPortInput, payloadPortInput, rocketBaud, payloadBaud]);
+
+  const toggleRocket = useCallback(async () => {
+    dispatch(connectionLoading());
+    try {
+      if (rocketConnected) {
+        await invoke(IPC_COMMANDS.DISCONNECT_ROCKET);
+      } else {
+        await connectRocket();
+      }
+    } catch(e) {
+      dispatch(connectionError(String(e)));
+    }
+  }, [dispatch, rocketConnected, rocketPortInput, rocketBaud]);
+
+  const togglePayload = useCallback(async () => {
+    dispatch(connectionLoading());
+    try {
+      if (payloadConnected) {
+        await invoke(IPC_COMMANDS.DISCONNECT_PAYLOAD);
+      } else {
+        await connectPayload();
+      }
+    } catch(e) {
+      dispatch(connectionError(String(e)));
+    }
+  }, [dispatch, payloadConnected, payloadPortInput, payloadBaud]);
 
   const handleStartMock = useCallback(async () => {
     dispatch(connectionLoading());
@@ -75,35 +152,25 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
   }, [dispatch]);
 
   const statusVariant =
-    mode === "disconnected" ? "muted" : mode === "mock" ? "info" : "nominal";
+    connState.mode === "disconnected" ? "muted" : isMock ? "info" : "nominal";
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "0.375rem 0.5rem",
-    fontSize: "0.75rem",
-    fontFamily: "var(--font-mono)",
-    backgroundColor: "var(--color-bg-tertiary)",
-    border: "1px solid var(--color-border-default)",
-    borderRadius: "0.25rem",
-    color: "var(--color-text-primary)",
-    outline: "none",
-  };
+  const renderPortOptions = () => [
+    <option key="none" value="">None / Disconnected</option>,
+    ...availablePorts.map((p) => {
+      const label = p.manufacturer ? `${p.path} (${p.manufacturer})` : p.path;
+      return <option key={p.path} value={p.path}>{label}</option>;
+    })
+  ];
 
-  const buttonStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "0.375rem",
-    padding: "0.375rem 0.75rem",
-    fontSize: "0.6875rem",
-    fontWeight: 600,
-    fontFamily: "var(--font-mono)",
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-    border: "1px solid var(--color-border-default)",
-    borderRadius: "0.25rem",
-    cursor: "pointer",
-    transition: "all 100ms ease",
-  };
+  const renderBaudOptions = () => (
+    <>
+      <option value="9600">9600</option>
+      <option value="19200">19200</option>
+      <option value="38400">38400</option>
+      <option value="57600">57600</option>
+      <option value="115200">115200</option>
+    </>
+  );
 
   return (
     <PanelContainer
@@ -113,118 +180,110 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
       headerRight={<StatusIndicator variant={statusVariant} size={8} />}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        {/* Serial Ports */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-          <div>
-            <label style={labelStyle}>Rocket {t("connection.port")}</label>
-            <input
-              style={inputStyle}
-              value={rocketPort}
-              onChange={(e) => setRocketPort(e.target.value)}
-              disabled={isConnected}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Payload {t("connection.port")}</label>
-            <input
-              style={inputStyle}
-              value={payloadPort}
-              onChange={(e) => setPayloadPort(e.target.value)}
-              disabled={isConnected}
-            />
-          </div>
-        </div>
+        
+        {/* Global Error Banner */}
+        {connState.error && (
+           <div style={errorBannerStyle}>
+              <AlertCircle size={12} /> {connState.error}
+           </div>
+        )}
 
-        {/* Baud Rate */}
-        <div>
-          <label style={labelStyle}>{t("connection.baudRate")}</label>
-          <select
-            style={inputStyle}
-            value={baudRate}
-            onChange={(e) => setBaudRate(e.target.value)}
-            disabled={isConnected}
-          >
-            <option value="9600">9600</option>
-            <option value="19200">19200</option>
-            <option value="38400">38400</option>
-            <option value="57600">57600</option>
-            <option value="115200">115200</option>
-          </select>
-        </div>
-
-        {/* Connect / Disconnect */}
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          {!isConnected ? (
-            <button
-              style={{
-                ...buttonStyle,
-                backgroundColor: "rgba(0, 255, 136, 0.1)",
-                color: "var(--color-status-nominal)",
-                borderColor: "var(--color-status-nominal)",
-              }}
-              onClick={handleConnect}
-            >
-              <Plug size={12} /> {t("connection.connect")}
-            </button>
-          ) : (
-            <button
-              style={{
-                ...buttonStyle,
-                backgroundColor: "rgba(255, 51, 102, 0.1)",
-                color: "var(--color-status-critical)",
-                borderColor: "var(--color-status-critical)",
-              }}
-              onClick={handleDisconnect}
-            >
-              <Unplug size={12} /> {t("connection.disconnect")}
-            </button>
+        {/* Global Controls */}
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center",
+          borderBottom: "1px solid var(--color-border-default)",
+          paddingBottom: "0.75rem",
+        }}>
+          {!anyConnected ? (
+              <button
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: "rgba(0, 255, 136, 0.1)",
+                  color: "var(--color-status-nominal)",
+                  borderColor: "var(--color-status-nominal)",
+                }}
+                onClick={handleGlobalToggle}
+                disabled={isMock}
+              >
+                <Plug size={12} /> GLOBAL CONNECT
+              </button>
+            ) : (
+              <button
+                style={{
+                  ...buttonStyle,
+                  backgroundColor: "rgba(255, 51, 102, 0.1)",
+                  color: "var(--color-status-critical)",
+                  borderColor: "var(--color-status-critical)",
+                }}
+                onClick={handleGlobalToggle}
+              >
+                <Unplug size={12} /> DISCONNECT ALL
+              </button>
           )}
-        </div>
 
-        {/* Mock Controls */}
-        <div
-          style={{
-            borderTop: "1px solid var(--color-border-default)",
-            paddingTop: "0.75rem",
-          }}
-        >
-          <label style={labelStyle}>{t("connection.mockMode")}</label>
-          <div style={{ display: "flex", gap: "0.375rem", marginTop: "0.375rem" }}>
-            <button
-              style={{
-                ...buttonStyle,
-                backgroundColor: "rgba(51, 153, 255, 0.1)",
-                color: "var(--color-status-info)",
-                borderColor: "var(--color-status-info)",
-              }}
-              onClick={handleStartMock}
-              disabled={isConnected}
-            >
-              <Play size={12} /> {t("connection.startMock")}
-            </button>
-            <button
-              style={{
-                ...buttonStyle,
-                backgroundColor: "var(--color-bg-tertiary)",
-                color: "var(--color-text-secondary)",
-              }}
-              onClick={handleStopMock}
-              disabled={mode !== "mock"}
-            >
-              <Square size={12} /> {t("connection.stopMock")}
-            </button>
-            <button
-              style={{
-                ...buttonStyle,
-                backgroundColor: "var(--color-bg-tertiary)",
-                color: "var(--color-text-secondary)",
-              }}
-              onClick={handleResetMock}
-            >
-              <RotateCcw size={12} /> {t("connection.resetMock")}
-            </button>
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+             <button style={mockButtonStyle} onClick={handleStartMock} disabled={anyConnected || isMock}>
+               <Play size={12} /> START MOCK
+             </button>
+             <button style={mockButtonStyle} onClick={handleStopMock} disabled={!isMock}>
+               <Square size={12} /> STOP
+             </button>
+             <button style={mockButtonStyle} onClick={handleResetMock}>
+               <RotateCcw size={12} />
+             </button>
           </div>
         </div>
+
+        {/* Rocket Card */}
+        <div style={cardStyle}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+            <div>
+              <label style={labelStyle}>Rocket Port</label>
+              <select style={inputStyle} value={rocketPortInput} onChange={(e) => setRocketPortInput(e.target.value)} disabled={rocketConnected || isMock}>
+                {renderPortOptions()}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Baud Rate</label>
+              <select style={inputStyle} value={rocketBaud} onChange={(e) => setRocketBaud(e.target.value)} disabled={rocketConnected || isMock}>
+                {renderBaudOptions()}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginTop: "0.5rem" }}>
+             <button style={rocketConnected ? disconnectBtnStyle : connectBtnStyle} onClick={toggleRocket} disabled={isMock || (!rocketPortInput && !rocketConnected)}>
+               {rocketConnected ? <Unplug size={12}/> : <Plug size={12}/>}
+               {rocketConnected ? " DISCONNECT ROCKET" : " CONNECT ROCKET"}
+             </button>
+          </div>
+        </div>
+
+        {/* Payload Card */}
+        <div style={cardStyle}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+            <div>
+              <label style={labelStyle}>Payload Port</label>
+              <select style={inputStyle} value={payloadPortInput} onChange={(e) => setPayloadPortInput(e.target.value)} disabled={payloadConnected || isMock}>
+                {renderPortOptions()}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Baud Rate</label>
+              <select style={inputStyle} value={payloadBaud} onChange={(e) => setPayloadBaud(e.target.value)} disabled={payloadConnected || isMock}>
+                {renderBaudOptions()}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginTop: "0.5rem" }}>
+             <button style={payloadConnected ? disconnectBtnStyle : connectBtnStyle} onClick={togglePayload} disabled={isMock || (!payloadPortInput && !payloadConnected)}>
+               {payloadConnected ? <Unplug size={12}/> : <Plug size={12}/>}
+               {payloadConnected ? " DISCONNECT PAYLOAD" : " CONNECT PAYLOAD"}
+             </button>
+          </div>
+        </div>
+
       </div>
     </PanelContainer>
   );
@@ -238,4 +297,77 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: "0.06em",
   color: "var(--color-text-muted)",
   marginBottom: "0.25rem",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "0.375rem 0.5rem",
+  fontSize: "0.75rem",
+  fontFamily: "var(--font-mono)",
+  backgroundColor: "var(--color-bg-tertiary)",
+  border: "1px solid var(--color-border-default)",
+  borderRadius: "0.25rem",
+  color: "var(--color-text-primary)",
+  outline: "none",
+};
+
+const cardStyle: React.CSSProperties = {
+  backgroundColor: "var(--color-bg-tertiary)",
+  border: "1px solid var(--color-border-active)",
+  borderRadius: "0.375rem",
+  padding: "0.5rem",
+};
+
+const buttonStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "0.375rem",
+  padding: "0.375rem 0.75rem",
+  fontSize: "0.6875rem",
+  fontWeight: 600,
+  fontFamily: "var(--font-mono)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  border: "1px solid var(--color-border-default)",
+  borderRadius: "0.25rem",
+  cursor: "pointer",
+  transition: "all 100ms ease",
+};
+
+const connectBtnStyle: React.CSSProperties = {
+  ...buttonStyle,
+  width: "100%",
+  justifyContent: "center",
+  backgroundColor: "rgba(0, 255, 136, 0.05)",
+  color: "var(--color-status-nominal)",
+  borderColor: "var(--color-border-default)",
+};
+
+const disconnectBtnStyle: React.CSSProperties = {
+  ...buttonStyle,
+  width: "100%",
+  justifyContent: "center",
+  backgroundColor: "rgba(255, 51, 102, 0.05)",
+  color: "var(--color-status-critical)",
+  borderColor: "rgba(255, 51, 102, 0.3)",
+};
+
+const mockButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  backgroundColor: "var(--color-bg-tertiary)",
+  color: "var(--color-text-secondary)",
+  padding: "0.375rem 0.5rem",
+};
+
+const errorBannerStyle: React.CSSProperties = {
+  backgroundColor: "rgba(255, 51, 102, 0.1)",
+  color: "var(--color-status-critical)",
+  border: "1px solid rgba(255, 51, 102, 0.3)",
+  padding: "0.375rem 0.5rem",
+  borderRadius: "0.25rem",
+  fontSize: "0.6875rem",
+  fontFamily: "var(--font-mono)",
+  display: "flex",
+  alignItems: "center",
+  gap: "0.375rem",
 };

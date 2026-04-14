@@ -28,110 +28,199 @@ pub fn list_serial_ports() -> Vec<PortInfo> {
     list_available_ports()
 }
 
-/// Connect to serial ports for rocket and/or payload telemetry.
-///
-/// Starts an async read loop that reads from the serial port(s),
-/// parses packets, logs to CSV, and emits to the frontend.
 #[tauri::command]
-pub async fn connect_serial(
-    _app: AppHandle,
+pub async fn connect_rocket(
+    app: AppHandle,
     state: State<'_, AppState>,
-    rocket_port: Option<String>,
-    payload_port: Option<String>,
+    port: String,
     baud_rate: Option<u32>,
 ) -> Result<String, String> {
-    // Check if already connected
+    // Cannot connect if in Mock mode
     {
         let status = state.connection_status.lock().unwrap();
-        if status.mode != ConnectionMode::Disconnected {
-            return Err("Already connected. Disconnect first.".to_string());
+        if status.mode == ConnectionMode::Mock {
+            return Err("Cannot connect while in Mock mode. Stop Mock first.".to_string());
         }
     }
 
     let baud = baud_rate.unwrap_or(crate::serial::config::DEFAULT_BAUD_RATE);
+    let config = SerialPortConfig::new(&port).with_baud_rate(baud);
 
-    // Validate at least one port is specified
-    if rocket_port.is_none() && payload_port.is_none() {
-        return Err("At least one port must be specified.".to_string());
-    }
-
-    // Open ports
-    let mut ports_opened = Vec::new();
-
-    if let Some(ref path) = rocket_port {
-        let config = SerialPortConfig::new(path).with_baud_rate(baud);
-        match crate::serial::reader::open_serial_port(&config) {
-            Ok(_port) => {
-                ports_opened.push(format!("rocket:{path}"));
-                log::info!("Opened rocket port: {path} @ {baud} baud");
+    match crate::serial::reader::open_serial_port(&config) {
+        Ok(serial_port) => {
+            // Update status
+            {
+                let mut status = state.connection_status.lock().unwrap();
+                status.mode = ConnectionMode::Serial;
+                status.rocket_port = Some(port.clone());
             }
-            Err(e) => return Err(format!("Failed to open rocket port: {e}")),
-        }
-    }
 
-    if let Some(ref path) = payload_port {
-        let config = SerialPortConfig::new(path).with_baud_rate(baud);
-        match crate::serial::reader::open_serial_port(&config) {
-            Ok(_port) => {
-                ports_opened.push(format!("payload:{path}"));
-                log::info!("Opened payload port: {path} @ {baud} baud");
+            // Start thread
+            state.rocket_cancel.store(false, Ordering::Relaxed);
+            spawn_serial_reader_loop(app.clone(), state.rocket_cancel.clone(), serial_port);
+
+            // Ensure logger is active
+            {
+                let mut logger = state.csv_logger.lock().unwrap();
+                if logger.is_none() {
+                    if let Ok(l) = CsvLogger::with_default_dir() {
+                        *logger = Some(l);
+                    }
+                }
             }
-            Err(e) => return Err(format!("Failed to open payload port: {e}")),
+
+            let status_clone = state.connection_status.lock().unwrap().clone();
+            emit_connection_status(&app, &status_clone);
+
+            log::info!("Connected Rocket to {port}");
+            Ok("Connected".to_string())
         }
+        Err(e) => Err(format!("Failed to open rocket port: {e}")),
     }
-
-    // Initialize CSV logger
-    {
-        let mut logger = state.csv_logger.lock().unwrap();
-        match CsvLogger::with_default_dir() {
-            Ok(l) => *logger = Some(l),
-            Err(e) => log::warn!("Failed to initialize CSV logger: {e}"),
-        }
-    }
-
-    // Update connection status
-    {
-        let mut status = state.connection_status.lock().unwrap();
-        status.mode = ConnectionMode::Serial;
-        status.rocket_port = rocket_port;
-        status.payload_port = payload_port;
-    }
-
-    state.serial_active.store(true, Ordering::Relaxed);
-    state.cancel_token.store(false, Ordering::Relaxed);
-
-    let msg = format!("Connected: {}", ports_opened.join(", "));
-    log::info!("{msg}");
-    Ok(msg)
 }
 
-/// Disconnect from serial ports.
 #[tauri::command]
-pub fn disconnect_serial(
+pub fn disconnect_rocket(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    // Signal the read loop to stop
-    state.cancel_token.store(true, Ordering::Relaxed);
-    state.serial_active.store(false, Ordering::Relaxed);
+    state.rocket_cancel.store(true, Ordering::Relaxed);
 
-    // Reset parser
-    state.frame_parser.lock().unwrap().reset();
-
-    // Update status
     {
         let mut status = state.connection_status.lock().unwrap();
-        status.mode = ConnectionMode::Disconnected;
         status.rocket_port = None;
-        status.payload_port = None;
+        if status.payload_port.is_none() {
+            status.mode = ConnectionMode::Disconnected;
+            state.frame_parser.lock().unwrap().reset();
+        }
     }
 
-    // Emit disconnected status
-    let status = state.connection_status.lock().unwrap().clone();
-    emit_connection_status(&app, &status);
+    let status_clone = state.connection_status.lock().unwrap().clone();
+    emit_connection_status(&app, &status_clone);
 
-    log::info!("Serial disconnected");
+    log::info!("Disconnected Rocket");
     Ok("Disconnected".to_string())
+}
+
+#[tauri::command]
+pub async fn connect_payload(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    port: String,
+    baud_rate: Option<u32>,
+) -> Result<String, String> {
+    {
+        let status = state.connection_status.lock().unwrap();
+        if status.mode == ConnectionMode::Mock {
+            return Err("Cannot connect while in Mock mode. Stop Mock first.".to_string());
+        }
+    }
+
+    let baud = baud_rate.unwrap_or(crate::serial::config::DEFAULT_BAUD_RATE);
+    let config = SerialPortConfig::new(&port).with_baud_rate(baud);
+
+    match crate::serial::reader::open_serial_port(&config) {
+        Ok(serial_port) => {
+            {
+                let mut status = state.connection_status.lock().unwrap();
+                status.mode = ConnectionMode::Serial;
+                status.payload_port = Some(port.clone());
+            }
+
+            state.payload_cancel.store(false, Ordering::Relaxed);
+            spawn_serial_reader_loop(app.clone(), state.payload_cancel.clone(), serial_port);
+
+            {
+                let mut logger = state.csv_logger.lock().unwrap();
+                if logger.is_none() {
+                    if let Ok(l) = CsvLogger::with_default_dir() {
+                        *logger = Some(l);
+                    }
+                }
+            }
+
+            let status_clone = state.connection_status.lock().unwrap().clone();
+            emit_connection_status(&app, &status_clone);
+
+            log::info!("Connected Payload to {port}");
+            Ok("Connected".to_string())
+        }
+        Err(e) => Err(format!("Failed to open payload port: {e}")),
+    }
+}
+
+#[tauri::command]
+pub fn disconnect_payload(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    state.payload_cancel.store(true, Ordering::Relaxed);
+
+    {
+        let mut status = state.connection_status.lock().unwrap();
+        status.payload_port = None;
+        if status.rocket_port.is_none() {
+            status.mode = ConnectionMode::Disconnected;
+            state.frame_parser.lock().unwrap().reset();
+        }
+    }
+
+    let status_clone = state.connection_status.lock().unwrap().clone();
+    emit_connection_status(&app, &status_clone);
+
+    log::info!("Disconnected Payload");
+    Ok("Disconnected".to_string())
+}
+
+fn spawn_serial_reader_loop(
+    app_handle: AppHandle,
+    cancel_token: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    mut port: Box<dyn serialport::SerialPort>,
+) {
+    use tauri::Manager;
+    std::thread::spawn(move || {
+        let mut parser = FrameParser::new();
+        let mut buffer: [u8; 1024] = [0; 1024];
+
+        log::info!("Hardware reader loop started");
+
+        while !cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+            match port.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    let parsed = parser.feed(&buffer[0..n]);
+                    
+                    if !parsed.is_empty() {
+                        let state = app_handle.state::<AppState>();
+                        for p in parsed {
+                            match p {
+                                ParsedPacket::Rocket(ref rkt) => {
+                                    emit_rocket_telemetry(&app_handle, rkt);
+                                    let mut status = state.connection_status.lock().unwrap();
+                                    status.rocket_packets_received += 1;
+                                }
+                                ParsedPacket::Payload(ref pld) => {
+                                    emit_payload_telemetry(&app_handle, pld);
+                                    let mut status = state.connection_status.lock().unwrap();
+                                    status.payload_packets_received += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(_) => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    continue;
+                }
+                Err(e) => {
+                    log::error!("Serial read error: {}", e);
+                    break;
+                }
+            }
+        }
+        log::info!("Hardware reader loop stopped");
+    });
 }
 
 // ============================================================================
@@ -139,16 +228,11 @@ pub fn disconnect_serial(
 // ============================================================================
 
 /// Start the mock data generator.
-///
-/// Spawns an async task that generates and emits telemetry at realistic rates:
-/// - Rocket avionics: 1 Hz
-/// - Payload scientific: 5 Hz
 #[tauri::command]
 pub async fn start_mock(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    // Check current state
     {
         let status = state.connection_status.lock().unwrap();
         if status.mode != ConnectionMode::Disconnected {
@@ -156,30 +240,25 @@ pub async fn start_mock(
         }
     }
 
-    // Update status to mock mode
     {
         let mut status = state.connection_status.lock().unwrap();
         status.mode = ConnectionMode::Mock;
     }
 
     state.mock_state.start();
-    state.cancel_token.store(false, Ordering::Relaxed);
+    state.mock_cancel.store(false, Ordering::Relaxed);
 
-    // Initialize CSV logger
     {
         let mut logger = state.csv_logger.lock().unwrap();
-        match CsvLogger::with_default_dir() {
-            Ok(l) => *logger = Some(l),
-            Err(e) => log::warn!("Failed to initialize CSV logger: {e}"),
+        if let Ok(l) = CsvLogger::with_default_dir() {
+            *logger = Some(l);
         }
     }
 
-    // Clone what we need for the async task
     let mock_state = state.mock_state.clone();
-    let cancel_token = state.cancel_token.clone();
+    let cancel_token = state.mock_cancel.clone();
     let app_handle = app.clone();
 
-    // Spawn the mock data loop
     tauri::async_runtime::spawn(async move {
         let generator = MockGenerator::with_defaults();
         let mut tick: u64 = 0;
@@ -196,11 +275,9 @@ pub async fn start_mock(
             let elapsed_ms = start_time.elapsed().as_millis() as u64;
             mock_state.set_elapsed_ms(elapsed_ms);
 
-            // Generate packets for this tick
             let packets = generator.generate_tick(tick);
 
             if packets.is_empty() {
-                // Flight ended
                 log::info!("Mock flight simulation complete at tick {tick}");
                 mock_state.stop();
                 break;
@@ -212,46 +289,36 @@ pub async fn start_mock(
                     MockPacket::Payload(b) => b.as_slice(),
                 };
 
-                // Parse through FrameParser (validates checksum)
                 let parsed = frame_parser.feed(bytes);
                 for p in parsed {
                     match p {
-                        ParsedPacket::Rocket(ref rkt) => {
-                            emit_rocket_telemetry(&app_handle, rkt);
-                        }
-                        ParsedPacket::Payload(ref pld) => {
-                            emit_payload_telemetry(&app_handle, pld);
-                        }
+                        ParsedPacket::Rocket(ref rkt) => emit_rocket_telemetry(&app_handle, rkt),
+                        ParsedPacket::Payload(ref pld) => emit_payload_telemetry(&app_handle, pld),
                     }
                 }
             }
 
             tick += 1;
-
-            // Sleep 200ms (5 Hz tick rate)
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         }
 
         log::info!("Mock data generator stopped");
     });
 
-    // Emit initial status
     let status = state.connection_status.lock().unwrap().clone();
     emit_connection_status(&app, &status);
 
     Ok("Mock data generator started".to_string())
 }
 
-/// Stop the mock data generator.
 #[tauri::command]
 pub fn stop_mock(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     state.mock_state.stop();
-    state.cancel_token.store(true, Ordering::Relaxed);
+    state.mock_cancel.store(true, Ordering::Relaxed);
 
-    // Update status
     {
         let mut status = state.connection_status.lock().unwrap();
         status.mode = ConnectionMode::Disconnected;
@@ -264,19 +331,16 @@ pub fn stop_mock(
     Ok("Mock data generator stopped".to_string())
 }
 
-/// Reset the mock data generator (stop + reset elapsed time).
 #[tauri::command]
 pub fn reset_mock(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     state.mock_state.reset();
-    state.cancel_token.store(true, Ordering::Relaxed);
+    state.mock_cancel.store(true, Ordering::Relaxed);
 
-    // Reset parser
     state.frame_parser.lock().unwrap().reset_all();
 
-    // Update status
     {
         let mut status = state.connection_status.lock().unwrap();
         *status = ConnectionStatus::default();
@@ -285,7 +349,6 @@ pub fn reset_mock(
     let status = state.connection_status.lock().unwrap().clone();
     emit_connection_status(&app, &status);
 
-    log::info!("Mock data generator reset");
     Ok("Mock data generator reset".to_string())
 }
 
@@ -293,7 +356,6 @@ pub fn reset_mock(
 // Status Command
 // ============================================================================
 
-/// Get the current connection status.
 #[tauri::command]
 pub fn get_connection_status(state: State<'_, AppState>) -> ConnectionStatus {
     state.sync_stats();

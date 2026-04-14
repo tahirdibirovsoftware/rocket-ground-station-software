@@ -19,8 +19,10 @@ pub fn run() {
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::list_serial_ports,
-            commands::connect_serial,
-            commands::disconnect_serial,
+            commands::connect_rocket,
+            commands::disconnect_rocket,
+            commands::connect_payload,
+            commands::disconnect_payload,
             commands::start_mock,
             commands::stop_mock,
             commands::reset_mock,

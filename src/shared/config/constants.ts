@@ -14,8 +14,10 @@ export const IPC_EVENTS = {
 
 /** Tauri command names */
 export const IPC_COMMANDS = {
-  CONNECT_SERIAL: "connect_serial",
-  DISCONNECT_SERIAL: "disconnect_serial",
+  CONNECT_ROCKET: "connect_rocket",
+  DISCONNECT_ROCKET: "disconnect_rocket",
+  CONNECT_PAYLOAD: "connect_payload",
+  DISCONNECT_PAYLOAD: "disconnect_payload",
   LIST_SERIAL_PORTS: "list_serial_ports",
   START_MOCK: "start_mock",
   STOP_MOCK: "stop_mock",

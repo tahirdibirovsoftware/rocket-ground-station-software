@@ -61,10 +61,12 @@ pub struct AppState {
     pub csv_logger: Mutex<Option<CsvLogger>>,
     /// Current connection status.
     pub connection_status: Mutex<ConnectionStatus>,
-    /// Flag indicating if a serial read loop is active.
-    pub serial_active: Arc<std::sync::atomic::AtomicBool>,
-    /// Handle to cancel the active data loop (mock or serial).
-    pub cancel_token: Arc<std::sync::atomic::AtomicBool>,
+    /// Handle to cancel the Rocket serial read loop.
+    pub rocket_cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Handle to cancel the Payload serial read loop.
+    pub payload_cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Handle to cancel the Mock data loop.
+    pub mock_cancel: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
@@ -74,8 +76,9 @@ impl AppState {
             frame_parser: Mutex::new(FrameParser::new()),
             csv_logger: Mutex::new(None),
             connection_status: Mutex::new(ConnectionStatus::default()),
-            serial_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            cancel_token: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            rocket_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            payload_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            mock_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 

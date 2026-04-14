@@ -625,3 +625,60 @@ Modified:
   src/shared/ui/DashboardLayout.tsx — LanguageSwitcher added to top bar
   src/shared/ui/index.ts           — Barrel export updated
 ```
+
+---
+
+## Phase 11 — Real-Time Hardware Discovery & Simulator ✓
+
+**Completed:** 2026-04-14
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| Create C++ `arduino_mock_rocket` simulator matching 36-byte structs perfectly | Done |
+| Create C++ `arduino_mock_payload` simulator matching 24-byte structs perfectly | Done |
+| React UI: Replace hardcoded port inputs with `<select>` dynamically polling `list_serial_ports` | Done |
+| Handle "None/Disconnected" grace states logically passing `None` to Tauri | Done |
+| Rust Backend: Inject generic `std::thread::spawn` background listeners in `connect_serial` | Done |
+| Link blocking `serialport` byte buffer streams asynchronously safely into `FrameParser` structs | Done |
+
+### Files Created
+
+```
+Hardware Mocks (arduino_mock_rocket/ & arduino_mock_payload/):
+  arduino_mock_rocket.ino   — 10Hz flight-state tracker + mock trajectory logic
+  arduino_mock_payload.ino  — 5Hz scientific sensor logic with noise
+
+Modified:
+  src/widgets/connection-panel/ConnectionPanel.tsx  — React auto-polling Dropdowns
+  src-tauri/src/ipc/commands.rs                     — Replaced static read with OS threads
+```
+
+### Key Decisions
+
+- **Isolated Arduino C++ Mocking** — Breaking simulators into distinct `.ino` projects to natively hook tests over 2 independent USB hardware outputs matching TEKNOFEST reality.
+- **Background OS threads (`std::thread`)** — Leveraging standard threads rather than tokio tasks for `serialport` interactions because blocking I/O negatively scales tokio asynchronous pooling loops.
+- **Empty Port Gracefall States** — Instead of fully crashing connections, passing an `Option::None` safely bypasses missing hardware so one stream can be tested individually.
+
+---
+
+## Phase 12 — Hybrid Connection Architecture ✓
+
+**Completed:** 2026-04-14
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| Refactored `ConnectionPanel` into decoupled Rocket and Payload cards | Done |
+| Implemented independent Redux state sync for `rocketPort` and `payloadPort` buttons | Done |
+| Re-engineered Backend IPC to use 4 discrete commands (`connect_rocket`, `connect_payload`, etc.) | Done |
+| Splintered monolithic `cancel_token` into `rocket_cancel` and `payload_cancel` for isolated threads | Done |
+| Implemented `Promise.allSettled()` orchestrator for "Global Connect" fallback logic | Done |
+
+### Key Decisions
+
+- **Backend Microservices** — The Rust backend drops standard "Global" assumptions. It now manages threaded serial streams as isolated components (`connect_rocket`, `connect_payload`), guaranteeing that an un-plugged Payload Arduino won't crash the Rocket thread.
+- **Frontend Hybrid Orchestrator** — A global generic connection is highly convenient, so React preserves a "Global Connect" button that blasts out independent API commands concurrently via `Promise.allSettled()`. It natively intercepts failed promises to print soft inline alert notifications while allowing the successful threads to keep running natively!
+- **State-Reactive UI** — Individual Connect/Disconnect buttons passively listen to the Redux active ports (`rocketConnected`). If you toggle "Global Connect", the individual card buttons seamlessly auto-sync to their "Disconnect" variants instantly.
