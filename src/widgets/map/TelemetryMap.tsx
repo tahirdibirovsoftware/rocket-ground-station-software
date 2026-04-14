@@ -105,10 +105,9 @@ export const TelemetryMap = React.memo(function TelemetryMap() {
           attributionControl={false}
           zoomControl={true}
         >
-          {/* Offline tiles: public/tiles/{z}/{x}/{y}.png — falls back to OSM */}
+          {/* High-resolution Esri Satellite Tiles for desert missions */}
           <TileLayer
-            url="/tiles/{z}/{x}/{y}.png"
-            errorTileUrl="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxZoom={18}
           />
 

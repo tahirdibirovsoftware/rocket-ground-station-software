@@ -59,6 +59,13 @@ pub fn list_available_ports() -> Vec<PortInfo> {
     match serialport::available_ports() {
         Ok(ports) => ports
             .into_iter()
+            .filter(|p| {
+                // Filter out ghost hardware ports (like /dev/ttyS*) by requiring USB or Bluetooth
+                matches!(
+                    p.port_type,
+                    serialport::SerialPortType::UsbPort(_) | serialport::SerialPortType::BluetoothPort
+                )
+            })
             .map(|p| {
                 let (manufacturer, product, serial_number) = match &p.port_type {
                     serialport::SerialPortType::UsbPort(usb) => (
