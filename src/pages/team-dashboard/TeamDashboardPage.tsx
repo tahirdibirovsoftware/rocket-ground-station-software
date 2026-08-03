@@ -94,7 +94,7 @@ export function TeamDashboardPage() {
         </div>
 
         {/* Column 2: Payload + Pressure Chart + Map */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0 }}>
           <PayloadSummary />
           <TelemetryChart
             id="chart-pressure"
@@ -105,7 +105,7 @@ export function TeamDashboardPage() {
             unit={t("units.hectopascals")}
             height={160}
           />
-          <TelemetryMap />
+          <TelemetryMap style={{ flex: 1, minHeight: 260 }} />
         </div>
 
         {/* Column 3: Connection + Health + Drone + Camera */}

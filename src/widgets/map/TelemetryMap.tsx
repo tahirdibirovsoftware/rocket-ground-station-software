@@ -57,10 +57,22 @@ const DRONE_ICON = new L.DivIcon({
 /** Default center: Turkey (competition region). */
 const DEFAULT_CENTER: L.LatLngTuple = [39.92, 32.85];
 
-/** Auto-center the map on the latest rocket position. */
+interface TelemetryMapProps {
+  style?: React.CSSProperties;
+}
+
+/** Auto-center the map on the latest rocket position and handle resize invalidation. */
 function MapAutoCenter({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
   const didCenter = useRef(false);
+
+  useEffect(() => {
+    // Force Leaflet to recalculate container dimensions when component mounts or flex resizes
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [map]);
 
   useEffect(() => {
     if (lat !== 0 && lng !== 0) {
@@ -76,7 +88,7 @@ function MapAutoCenter({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-export const TelemetryMap = React.memo(function TelemetryMap() {
+export const TelemetryMap = React.memo(function TelemetryMap({ style }: TelemetryMapProps) {
   const rocketGps = useAppSelector(selectRocketGps);
   const payloadGps = useAppSelector(selectPayloadGps);
   const droneGps = useAppSelector(selectDroneGps);
@@ -101,17 +113,24 @@ export const TelemetryMap = React.memo(function TelemetryMap() {
     .filter((p) => p.latitude !== 0 && p.longitude !== 0)
     .map((p) => [p.latitude, p.longitude]);
 
+  // Determine initial center
+  const initialCenter: L.LatLngTuple =
+    rocketGps && rocketGps.lat !== 0
+      ? [rocketGps.lat, rocketGps.lng]
+      : DEFAULT_CENTER;
+
   return (
     <PanelContainer
       id="telemetry-map"
       title="Map"
       icon={<MapPin size={14} />}
+      style={style}
     >
-      <div style={{ height: "100%", minHeight: 250, borderRadius: "0.25rem", overflow: "hidden" }}>
+      <div style={{ height: "100%", width: "100%", minHeight: 250, borderRadius: "0.25rem", overflow: "hidden", display: "flex" }}>
         <MapContainer
-          center={DEFAULT_CENTER}
-          zoom={10}
-          style={{ height: "100%", width: "100%", background: "var(--color-bg-tertiary)" }}
+          center={initialCenter}
+          zoom={rocketGps && rocketGps.lat !== 0 ? 14 : 10}
+          style={{ height: "100%", width: "100%", flex: 1, background: "var(--color-bg-tertiary)" }}
           attributionControl={false}
           zoomControl={true}
         >
