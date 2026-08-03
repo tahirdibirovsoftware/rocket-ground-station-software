@@ -305,19 +305,20 @@ export const CameraPanel = React.memo(function CameraPanel({ style }: CameraPane
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "0.75rem",
-                padding: "1.5rem 1rem",
+                gap: "0.5rem",
+                padding: "0.75rem",
                 textAlign: "center",
                 width: "100%",
                 height: "100%",
+                overflowY: "auto",
                 background: "radial-gradient(circle at center, rgba(0,200,255,0.05) 0%, rgba(5,10,20,0.95) 70%)",
               }}
             >
               {/* Radar Icon Circle */}
               <div
                 style={{
-                  width: 54,
-                  height: 54,
+                  width: 44,
+                  height: 44,
                   borderRadius: "50%",
                   border: "1.5px dashed rgba(148, 163, 184, 0.3)",
                   display: "flex",
@@ -325,15 +326,16 @@ export const CameraPanel = React.memo(function CameraPanel({ style }: CameraPane
                   justifyContent: "center",
                   backgroundColor: "rgba(15, 23, 42, 0.6)",
                   boxShadow: "0 0 20px rgba(0,0,0,0.5)",
+                  flexShrink: 0,
                 }}
               >
-                <CameraOff size={24} style={{ color: "var(--color-text-muted)" }} />
+                <CameraOff size={20} style={{ color: "var(--color-text-muted)" }} />
               </div>
 
               <div>
                 <div
                   style={{
-                    fontSize: "0.8125rem",
+                    fontSize: "0.75rem",
                     fontWeight: 700,
                     color: "var(--color-text-secondary)",
                     fontFamily: "var(--font-mono)",
@@ -347,11 +349,11 @@ export const CameraPanel = React.memo(function CameraPanel({ style }: CameraPane
                 </div>
                 <div
                   style={{
-                    fontSize: "0.6875rem",
+                    fontSize: "0.625rem",
                     color: "var(--color-text-muted)",
                     maxWidth: 280,
-                    lineHeight: "1.4",
-                    marginTop: 4,
+                    lineHeight: "1.3",
+                    marginTop: 2,
                   }}
                 >
                   {error ||
@@ -368,13 +370,14 @@ export const CameraPanel = React.memo(function CameraPanel({ style }: CameraPane
                   display: "flex",
                   alignItems: "center",
                   gap: "0.375rem",
-                  fontSize: "0.625rem",
+                  fontSize: "0.5625rem",
                   fontFamily: "var(--font-mono)",
                   color: "var(--color-text-muted)",
                   backgroundColor: "rgba(255,255,255,0.03)",
-                  padding: "0.2rem 0.5rem",
-                  borderRadius: "0.25rem",
+                  padding: "0.15rem 0.4rem",
+                  borderRadius: "0.2rem",
                   border: "1px solid var(--color-border-default)",
+                  flexShrink: 0,
                 }}
               >
                 <Radio size={10} style={{ color: "var(--color-status-info)" }} />

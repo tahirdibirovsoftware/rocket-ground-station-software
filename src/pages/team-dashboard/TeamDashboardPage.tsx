@@ -19,9 +19,8 @@ import {
 /**
  * Team Dashboard — Technical diagnostics view for the engineering team.
  *
- * Layout:
- * - Top row: Flight Timeline (full width)
- * - Main grid: Avionics + Charts | Payload + Map | Connection + Health + Drone + Camera
+ * Fully responsive across all display resolutions (1366x768, 1080p, 1440p, 4K).
+ * Prevents UI compression by balancing column layout and flex parameters.
  */
 export function TeamDashboardPage() {
   const { t } = useTranslation();
@@ -29,7 +28,7 @@ export function TeamDashboardPage() {
   const velocityData = useAppSelector(selectRocketVelocityHistory);
   const pressureData = useAppSelector(selectRocketPressureHistory);
 
-  // Map pressure data to single-value chart format (pressure)
+  // Map pressure data to single-value chart format
   const pressureChartData = pressureData.map((p) => ({ t: p.t, v: p.p1 }));
 
   return (
@@ -59,19 +58,20 @@ export function TeamDashboardPage() {
       {/* Flight Timeline — full width */}
       <FlightTimeline />
 
-      {/* Main grid: 3-column layout */}
+      {/* Main Grid: Responsive 3-column layout */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
           gap: "0.75rem",
           flex: 1,
           minHeight: 0,
-          overflow: "auto",
+          overflowY: "auto",
+          paddingRight: "0.25rem",
         }}
       >
-        {/* Column 1: Rocket avionics + Charts */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        {/* Column 1: Rocket Avionics + Charts */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300 }}>
           <AvionicsSummary />
           <TelemetryChart
             id="chart-altitude"
@@ -93,8 +93,8 @@ export function TeamDashboardPage() {
           />
         </div>
 
-        {/* Column 2: Payload + Pressure chart + Map */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        {/* Column 2: Payload + Pressure Chart + Map */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300 }}>
           <PayloadSummary />
           <TelemetryChart
             id="chart-pressure"
@@ -109,10 +109,12 @@ export function TeamDashboardPage() {
         </div>
 
         {/* Column 3: Connection + Health + Drone + Camera */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flex: 1, minHeight: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0 }}>
           <ConnectionPanel />
-          <SystemHealth />
-          <DroneSummary />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            <SystemHealth />
+            <DroneSummary />
+          </div>
           <CameraPanel style={{ flex: 1, minHeight: 260 }} />
         </div>
       </div>

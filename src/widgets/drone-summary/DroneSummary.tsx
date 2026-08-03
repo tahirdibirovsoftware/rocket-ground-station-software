@@ -32,8 +32,8 @@ export const DroneSummary = React.memo(function DroneSummary() {
         </span>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", paddingBottom: "0.25rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
           <TelemetryValue
             label={t("telemetry.altitude")}
             value={latest && typeof latest.altitude === "number" ? latest.altitude.toFixed(1) : "---"}
