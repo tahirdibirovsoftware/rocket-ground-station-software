@@ -150,8 +150,13 @@ impl FrameParser {
             let dt = (packet.timestamp_ms - self.last_timestamp_ms) as f32 / 1000.0;
             if dt > 0.01 {
                 let inst_v = (alt - self.last_altitude) / dt;
-                // Low-pass filter to smooth pressure quantization noise
-                packet.gps_speed = (inst_v * 10.0).round() / 10.0;
+                // On pad (FlightState::Pad), filter out sensor 0.1m quantization noise (+/- 1.5 m/s)
+                let smoothed_v = if self.current_flight_state == FlightState::Pad && inst_v.abs() <= 2.0 {
+                    0.0
+                } else {
+                    (inst_v * 10.0).round() / 10.0
+                };
+                packet.gps_speed = smoothed_v;
             }
         }
         self.last_timestamp_ms = packet.timestamp_ms;
