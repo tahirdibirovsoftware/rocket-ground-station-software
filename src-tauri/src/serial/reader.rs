@@ -161,15 +161,21 @@ impl FrameParser {
         }
         self.last_timestamp_ms = packet.timestamp_ms;
 
-        // 1. Update max altitude
-        if alt > self.max_altitude {
+        // 1. Ground Hysteresis Safeguard for Bench Testing:
+        // If altitude is near ground level (< 5.0 m) AND max historical altitude was low (< 50.0 m),
+        // force state back to Pad so bench testing noise spikes never trap the state machine.
+        if alt < 5.0 && self.max_altitude < 50.0 {
+            self.current_flight_state = FlightState::Pad;
+            self.primary_parachute_deployed = false;
+            self.secondary_parachute_deployed = false;
+        } else if alt > self.max_altitude {
             self.max_altitude = alt;
         }
 
         // 2. State transition logic
         match self.current_flight_state {
             FlightState::Pad => {
-                if alt > 15.0 {
+                if alt > 25.0 {
                     self.current_flight_state = FlightState::Powered;
                 }
             }
