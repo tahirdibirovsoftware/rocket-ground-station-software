@@ -1,19 +1,16 @@
-//! Mock stream generator — produces raw binary packets at configurable rates.
+//! Mock stream generator — produces simulated telemetry packets in ASCII CSV format.
 //!
-//! The `MockGenerator` acts as an async data source that can be controlled
-//! via Tauri commands (`start_mock`, `stop_mock`, `reset_mock`). It emits
-//! raw `Vec<u8>` packets with valid checksums at the correct data rates:
-//! - Rocket Avionics: 1 Hz (one 36-byte packet per second)
-//! - Payload Scientific: 5 Hz (five 24-byte packets per second)
+//! Emits ASCII CSV bytes starting with "AA,", "BB,", or "CC," at regular intervals.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
-use crate::protocol::rocket_packet::build_rocket_packet;
-use crate::protocol::payload_packet::build_payload_packet;
+use crate::protocol::telemetry_packet::TelemetryPacket;
+use crate::protocol::rocket_packet::FlightState;
 
 use super::flight_profile::{
-    generate_rocket_packet, generate_payload_packet, FlightProfileConfig,
+    altitude_at, flight_state_at, gps_at, pressure_from_altitude,
+    scientific_sensor_at, velocity_at, FlightProfileConfig,
 };
 
 /// Represents a generated packet ready for consumption.
@@ -21,6 +18,7 @@ use super::flight_profile::{
 pub enum MockPacket {
     Rocket(Vec<u8>),
     Payload(Vec<u8>),
+    Drone(Vec<u8>),
 }
 
 /// Shared state for controlling the mock generator across threads.
@@ -72,10 +70,7 @@ impl Default for MockState {
     }
 }
 
-/// Generates raw binary packets for a specific point in time.
-///
-/// This is the core generation function used by both the async loop
-/// and the synchronous test helpers.
+/// Generates simulated CSV bytes.
 pub struct MockGenerator {
     config: FlightProfileConfig,
 }
@@ -91,49 +86,179 @@ impl MockGenerator {
         Self::new(FlightProfileConfig::default())
     }
 
-    /// Generate a rocket avionics packet (36 bytes) for the given elapsed time.
-    /// Returns `None` if the flight has ended (elapsed > flight_end).
+    /// Generate simulated Rocket telemetry in ASCII CSV format.
     pub fn generate_rocket_bytes(&self, elapsed_s: f32) -> Option<MockPacket> {
         if elapsed_s > self.config.timings.flight_end {
             return None;
         }
-        let packet = generate_rocket_packet(elapsed_s, &self.config);
-        let bytes = build_rocket_packet(&packet);
-        Some(MockPacket::Rocket(bytes.to_vec()))
+        let timestamp_ms = (elapsed_s * 1000.0) as u32;
+        let alt = altitude_at(elapsed_s, &self.config.timings);
+        let vel = velocity_at(elapsed_s, &self.config.timings);
+        let (lat, lon) = gps_at(elapsed_s, self.config.launch_lat, self.config.launch_lon);
+        let press = pressure_from_altitude(alt);
+        
+        let state = flight_state_at(elapsed_s, &self.config.timings);
+        let accel_z = match state {
+            FlightState::Powered => 25.0,
+            FlightState::Unpowered => -9.8,
+            FlightState::Pad => 9.8,
+            _ => -1.5,
+        };
+
+        let packet = TelemetryPacket {
+            header: "AA".to_string(),
+            timestamp_ms,
+            accel_x: 0.12,
+            accel_y: -0.05,
+            accel_z,
+            gyro_x: 0.01,
+            gyro_y: -0.02,
+            gyro_z: 0.005,
+            mag_x: 12.5,
+            mag_y: -8.2,
+            mag_z: 42.1,
+            temp: 24.5 - (alt * 0.0065),
+            pressure: press,
+            humidity: 45.0 - (alt * 0.01),
+            altitude: alt,
+            aht_temp: 24.2 - (alt * 0.006),
+            aht_hum: 46.5 - (alt * 0.009),
+            latitude: lat,
+            longitude: lon,
+            gps_altitude: alt,
+            gps_speed: vel.abs(),
+            gps_course: 180.0,
+            roll: 12.0 + elapsed_s * 0.5,
+            pitch: 5.0 + elapsed_s * 0.2,
+            yaw: 90.0 + elapsed_s * 0.1,
+            flight_state: state,
+            primary_parachute_deployed: matches!(state, FlightState::PrimaryChute | FlightState::SecondaryChute),
+            secondary_parachute_deployed: matches!(state, FlightState::SecondaryChute),
+        };
+        
+        let csv_str = packet.to_csv_string();
+        Some(MockPacket::Rocket(csv_str.into_bytes()))
     }
 
-    /// Generate a payload scientific packet (24 bytes) for the given elapsed time.
-    /// Returns `None` if the flight has ended (elapsed > flight_end).
+    /// Generate simulated Payload telemetry in ASCII CSV format.
     pub fn generate_payload_bytes(&self, elapsed_s: f32) -> Option<MockPacket> {
         if elapsed_s > self.config.timings.flight_end {
             return None;
         }
-        let packet = generate_payload_packet(elapsed_s, &self.config);
-        let bytes = build_payload_packet(&packet);
-        Some(MockPacket::Payload(bytes.to_vec()))
+        let timestamp_ms = (elapsed_s * 1000.0) as u32;
+        let alt = altitude_at(elapsed_s, &self.config.timings) * 0.98;
+        let (lat, lon) = gps_at(elapsed_s, self.config.launch_lat, self.config.launch_lon);
+        let payload_lat = lat + 0.0002;
+        let payload_lon = lon - 0.0001;
+        let press = pressure_from_altitude(alt);
+        
+        let packet = TelemetryPacket {
+            header: "BB".to_string(),
+            timestamp_ms,
+            accel_x: -0.05,
+            accel_y: 0.08,
+            accel_z: 9.8,
+            gyro_x: -0.01,
+            gyro_y: 0.01,
+            gyro_z: 0.02,
+            mag_x: 10.4,
+            mag_y: -9.5,
+            mag_z: 40.0,
+            temp: scientific_sensor_at(elapsed_s, timestamp_ms),
+            pressure: press,
+            humidity: 50.0,
+            altitude: alt,
+            aht_temp: 23.5,
+            aht_hum: 51.0,
+            latitude: payload_lat,
+            longitude: payload_lon,
+            gps_altitude: alt,
+            gps_speed: 0.0,
+            gps_course: 0.0,
+            roll: 0.0,
+            pitch: 0.0,
+            yaw: 0.0,
+            flight_state: FlightState::Pad,
+            primary_parachute_deployed: false,
+            secondary_parachute_deployed: false,
+        };
+        
+        let csv_str = packet.to_csv_string();
+        Some(MockPacket::Payload(csv_str.into_bytes()))
     }
 
-    /// Generate all packets that should be emitted at a given tick.
-    ///
-    /// At every tick (200ms / 5 Hz):
-    /// - Always emits a payload packet (5 Hz)
-    /// - Emits a rocket packet every 5th tick (1 Hz)
-    ///
-    /// `tick_index` is 0-based and increments at 5 Hz.
+    /// Generate simulated Drone telemetry in ASCII CSV format.
+    pub fn generate_drone_bytes(&self, elapsed_s: f32) -> Option<MockPacket> {
+        if elapsed_s > self.config.timings.flight_end {
+            return None;
+        }
+        let timestamp_ms = (elapsed_s * 1000.0) as u32;
+        
+        let alt = if elapsed_s < 10.0 {
+            elapsed_s * 5.0
+        } else if elapsed_s < 150.0 {
+            50.0
+        } else {
+            (50.0 - (elapsed_s - 150.0) * 3.0).max(0.0)
+        };
+
+        let (lat, lon) = gps_at(elapsed_s, self.config.launch_lat, self.config.launch_lon);
+        let drone_lat = lat - 0.0003;
+        let drone_lon = lon + 0.0004;
+        let press = pressure_from_altitude(alt);
+
+        let packet = TelemetryPacket {
+            header: "CC".to_string(),
+            timestamp_ms,
+            accel_x: 0.01,
+            accel_y: 0.01,
+            accel_z: 9.8,
+            gyro_x: 0.002,
+            gyro_y: 0.003,
+            gyro_z: 0.001,
+            mag_x: 11.2,
+            mag_y: -8.9,
+            mag_z: 41.5,
+            temp: 25.1,
+            pressure: press,
+            humidity: 42.0,
+            altitude: alt,
+            aht_temp: 24.8,
+            aht_hum: 43.5,
+            latitude: drone_lat,
+            longitude: drone_lon,
+            gps_altitude: alt,
+            gps_speed: if alt > 0.0 { 3.5 } else { 0.0 },
+            gps_course: 90.0,
+            roll: 1.2,
+            pitch: -0.8,
+            yaw: 180.0,
+            flight_state: FlightState::Pad,
+            primary_parachute_deployed: false,
+            secondary_parachute_deployed: false,
+        };
+
+        let csv_str = packet.to_csv_string();
+        Some(MockPacket::Drone(csv_str.into_bytes()))
+    }
+
+    /// Generate all packets for a tick.
     pub fn generate_tick(&self, tick_index: u64) -> Vec<MockPacket> {
-        let elapsed_s = tick_index as f32 * 0.2; // 200ms per tick
+        let elapsed_s = tick_index as f32 * 0.2;
         let mut packets = Vec::new();
 
-        // Payload at every tick (5 Hz)
-        if let Some(p) = self.generate_payload_bytes(elapsed_s) {
-            packets.push(p);
-        }
-
-        // Rocket every 5th tick (1 Hz)
         if tick_index % 5 == 0 {
             if let Some(r) = self.generate_rocket_bytes(elapsed_s) {
                 packets.push(r);
             }
+        }
+
+        if let Some(p) = self.generate_payload_bytes(elapsed_s) {
+            packets.push(p);
+        }
+
+        if let Some(d) = self.generate_drone_bytes(elapsed_s) {
+            packets.push(d);
         }
 
         packets

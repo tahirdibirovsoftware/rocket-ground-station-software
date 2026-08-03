@@ -87,20 +87,15 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
         >
           <TelemetryValue
             label={t("telemetry.altitude")}
-            value={latest ? latest.altitude.toFixed(0) : "---"}
+            value={latest && typeof latest.altitude === "number" ? latest.altitude.toFixed(0) : "---"}
             unit={t("units.meters")}
             size="xl"
           />
           <TelemetryValue
             label={t("telemetry.velocity")}
-            value={latest ? latest.velocity.toFixed(1) : "---"}
+            value={latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed.toFixed(1) : "---"}
             unit={t("units.metersPerSecond")}
             size="xl"
-            color={
-              latest && latest.velocity < 0
-                ? "var(--color-status-warning)"
-                : undefined
-            }
           />
         </div>
 

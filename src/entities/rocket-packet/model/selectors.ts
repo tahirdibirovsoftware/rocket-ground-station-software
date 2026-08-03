@@ -27,13 +27,13 @@ export const selectRocketPacketCount = createSelector(
 /** Select only the altitude history (for charting). */
 export const selectRocketAltitudeHistory = createSelector(
   selectRocketHistory,
-  (history) => history.map((p) => ({ t: p.timestamp, v: p.altitude })),
+  (history) => history.map((p) => ({ t: p.timestampMs, v: p.altitude })),
 );
 
 /** Select only the velocity history (for charting). */
 export const selectRocketVelocityHistory = createSelector(
   selectRocketHistory,
-  (history) => history.map((p) => ({ t: p.timestamp, v: p.velocity })),
+  (history) => history.map((p) => ({ t: p.timestampMs, v: p.gpsSpeed })),
 );
 
 /** Select only the pressure history (for charting). */
@@ -41,9 +41,9 @@ export const selectRocketPressureHistory = createSelector(
   selectRocketHistory,
   (history) =>
     history.map((p) => ({
-      t: p.timestamp,
-      p1: p.pressure1,
-      p2: p.pressure2,
+      t: p.timestampMs,
+      p1: p.pressure,
+      p2: p.pressure,
     })),
 );
 

@@ -23,7 +23,7 @@ export const selectIsMockMode = createSelector(
 
 export const selectConnectionPorts = createSelector(
   selectConnectionSlice,
-  (s) => ({ rocket: s.rocketPort, payload: s.payloadPort }),
+  (s) => ({ rfd: s.rfdPort }),
 );
 
 export const selectConnectionStats = createSelector(
@@ -31,6 +31,7 @@ export const selectConnectionStats = createSelector(
   (s) => ({
     rocketPackets: s.rocketPacketsReceived,
     payloadPackets: s.payloadPacketsReceived,
+    dronePackets: s.dronePacketsReceived,
     checksumFailures: s.checksumFailures,
     uptimeMs: s.uptimeMs,
   }),

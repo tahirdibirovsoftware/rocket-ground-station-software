@@ -1,15 +1,5 @@
 /**
- * TelemetryMap — Leaflet map showing rocket and payload GPS tracks.
- *
- * Configured for offline tile usage (public/tiles/{z}/{x}/{y}.png).
- * Falls back to OpenStreetMap tiles for development when local tiles
- * are unavailable.
- *
- * Features:
- * - Rocket marker (red) with descent polyline trail
- * - Payload marker (blue) with descent polyline trail
- * - Launch site marker (flag icon)
- * - Auto-center on latest rocket position
+ * TelemetryMap — Leaflet map showing rocket, payload, and drone GPS tracks.
  */
 import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
@@ -19,6 +9,7 @@ import { PanelContainer } from "@shared/ui";
 import { useAppSelector } from "@app/store";
 import { selectRocketGps, selectRocketHistory } from "@entities/rocket-packet";
 import { selectPayloadGps, selectPayloadHistory } from "@entities/payload-packet";
+import { selectDroneGps, selectDroneHistory } from "@entities/drone-packet";
 
 import "leaflet/dist/leaflet.css";
 
@@ -52,6 +43,17 @@ const PAYLOAD_ICON = new L.DivIcon({
   iconAnchor: [7, 7],
 });
 
+const DRONE_ICON = new L.DivIcon({
+  className: "",
+  html: `<div style="
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #00ff88; border: 2px solid #fff;
+    box-shadow: 0 0 8px rgba(0,255,136,0.6);
+  "></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
 /** Default center: Turkey (competition region). */
 const DEFAULT_CENTER: L.LatLngTuple = [39.92, 32.85];
 
@@ -77,8 +79,11 @@ function MapAutoCenter({ lat, lng }: { lat: number; lng: number }) {
 export const TelemetryMap = React.memo(function TelemetryMap() {
   const rocketGps = useAppSelector(selectRocketGps);
   const payloadGps = useAppSelector(selectPayloadGps);
+  const droneGps = useAppSelector(selectDroneGps);
+
   const rocketHistory = useAppSelector(selectRocketHistory);
   const payloadHistory = useAppSelector(selectPayloadHistory);
+  const droneHistory = useAppSelector(selectDroneHistory);
 
   // Build polyline arrays (last 200 points for performance)
   const rocketTrail: L.LatLngTuple[] = rocketHistory
@@ -87,6 +92,11 @@ export const TelemetryMap = React.memo(function TelemetryMap() {
     .map((p) => [p.latitude, p.longitude]);
 
   const payloadTrail: L.LatLngTuple[] = payloadHistory
+    .slice(-200)
+    .filter((p) => p.latitude !== 0 && p.longitude !== 0)
+    .map((p) => [p.latitude, p.longitude]);
+
+  const droneTrail: L.LatLngTuple[] = droneHistory
     .slice(-200)
     .filter((p) => p.latitude !== 0 && p.longitude !== 0)
     .map((p) => [p.latitude, p.longitude]);
@@ -105,7 +115,7 @@ export const TelemetryMap = React.memo(function TelemetryMap() {
           attributionControl={false}
           zoomControl={true}
         >
-          {/* High-resolution Esri Satellite Tiles for desert missions */}
+          {/* Satellite Tiles for desert missions */}
           <TileLayer
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxZoom={18}
@@ -138,6 +148,17 @@ export const TelemetryMap = React.memo(function TelemetryMap() {
             />
           )}
 
+          {/* Drone trail */}
+          {droneTrail.length > 1 && (
+            <Polyline
+              positions={droneTrail}
+              color="#00ff88"
+              weight={3}
+              opacity={0.7}
+              dashArray="6 4"
+            />
+          )}
+
           {/* Rocket marker */}
           {rocketGps && rocketGps.lat !== 0 && (
             <Marker
@@ -151,6 +172,14 @@ export const TelemetryMap = React.memo(function TelemetryMap() {
             <Marker
               position={[payloadGps.lat, payloadGps.lng]}
               icon={PAYLOAD_ICON}
+            />
+          )}
+
+          {/* Drone marker */}
+          {droneGps && droneGps.lat !== 0 && (
+            <Marker
+              position={[droneGps.lat, droneGps.lng]}
+              icon={DRONE_ICON}
             />
           )}
         </MapContainer>

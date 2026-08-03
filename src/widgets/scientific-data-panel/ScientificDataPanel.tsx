@@ -119,7 +119,7 @@ export const ScientificDataPanel = React.memo(function ScientificDataPanel() {
         {/* Large current value */}
         <TelemetryValue
           label={t("telemetry.scientificData")}
-          value={latest ? latest.scientificSensorData.toFixed(3) : "---"}
+          value={latest && typeof latest.temp === "number" ? latest.temp.toFixed(3) : "---"}
           size="xl"
           color="var(--color-status-info)"
         />
@@ -146,7 +146,7 @@ export const ScientificDataPanel = React.memo(function ScientificDataPanel() {
             color: "var(--color-text-muted)",
           }}
         >
-          T+{latest ? `${(latest.timestamp / 1000).toFixed(1)}s` : "---"}
+          T+{latest && typeof latest.timestampMs === "number" ? `${(latest.timestampMs / 1000).toFixed(1)}s` : "---"}
         </span>
       </div>
     </PanelContainer>

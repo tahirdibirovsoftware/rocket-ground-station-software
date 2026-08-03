@@ -3,10 +3,12 @@ import { Mountain, Zap, Gauge } from "lucide-react";
 import { ConnectionPanel } from "@widgets/connection-panel";
 import { AvionicsSummary } from "@widgets/avionics-summary";
 import { PayloadSummary } from "@widgets/payload-summary";
+import { DroneSummary } from "@widgets/drone-summary";
 import { SystemHealth } from "@widgets/system-health";
 import { FlightTimeline } from "@widgets/flight-timeline";
 import { TelemetryChart } from "@widgets/charts";
 import { TelemetryMap } from "@widgets/map";
+import { CameraPanel } from "@widgets/camera-panel";
 import { useAppSelector } from "@app/store";
 import {
   selectRocketAltitudeHistory,
@@ -19,7 +21,7 @@ import {
  *
  * Layout:
  * - Top row: Flight Timeline (full width)
- * - Main grid: Avionics + Charts | Payload + Map | Connection + Health
+ * - Main grid: Avionics + Charts | Payload + Map | Connection + Health + Drone + Camera
  */
 export function TeamDashboardPage() {
   const { t } = useTranslation();
@@ -27,7 +29,7 @@ export function TeamDashboardPage() {
   const velocityData = useAppSelector(selectRocketVelocityHistory);
   const pressureData = useAppSelector(selectRocketPressureHistory);
 
-  // Map pressure data to single-value chart format (pressure1)
+  // Map pressure data to single-value chart format (pressure)
   const pressureChartData = pressureData.map((p) => ({ t: p.t, v: p.p1 }));
 
   return (
@@ -106,10 +108,12 @@ export function TeamDashboardPage() {
           <TelemetryMap />
         </div>
 
-        {/* Column 3: Connection + Health */}
+        {/* Column 3: Connection + Health + Drone + Camera */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <ConnectionPanel />
           <SystemHealth />
+          <DroneSummary />
+          <CameraPanel />
         </div>
       </div>
     </div>

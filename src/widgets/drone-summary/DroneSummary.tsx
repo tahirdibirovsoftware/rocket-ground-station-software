@@ -1,28 +1,28 @@
 /**
- * PayloadSummary — Live payload scientific telemetry panel.
+ * DroneSummary — Live drone telemetry panel.
  *
- * Displays payload GPS coordinates, altitude, and scientific sensor data.
+ * Displays drone GPS coordinates, altitude, speed, and course.
  */
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Cpu } from "lucide-react";
+import { Navigation } from "lucide-react";
 import { PanelContainer, TelemetryValue, DataRow } from "@shared/ui";
 import { useAppSelector } from "@app/store";
 import {
-  selectLatestPayloadPacket,
-  selectPayloadPacketCount,
-} from "@entities/payload-packet";
+  selectLatestDronePacket,
+  selectDronePacketCount,
+} from "@entities/drone-packet";
 
-export const PayloadSummary = React.memo(function PayloadSummary() {
+export const DroneSummary = React.memo(function DroneSummary() {
   const { t } = useTranslation();
-  const latest = useAppSelector(selectLatestPayloadPacket);
-  const count = useAppSelector(selectPayloadPacketCount);
+  const latest = useAppSelector(selectLatestDronePacket);
+  const count = useAppSelector(selectDronePacketCount);
 
   return (
     <PanelContainer
-      id="payload-summary"
-      title={t("dashboard.referee.scientificData")}
-      icon={<Cpu size={14} />}
+      id="drone-summary"
+      title="Drone Telemetry"
+      icon={<Navigation size={14} />}
       headerRight={
         <span
           className="font-telemetry"
@@ -40,9 +40,10 @@ export const PayloadSummary = React.memo(function PayloadSummary() {
             unit={t("units.meters")}
           />
           <TelemetryValue
-            label={t("telemetry.scientificData")}
-            value={latest && typeof latest.temp === "number" ? latest.temp.toFixed(2) : "---"}
-            color="var(--color-status-info)"
+            label="Drone Speed"
+            value={latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed.toFixed(1) : "---"}
+            unit="m/s"
+            color="var(--color-status-nominal)"
           />
         </div>
         <DataRow
@@ -52,6 +53,10 @@ export const PayloadSummary = React.memo(function PayloadSummary() {
         <DataRow
           label={t("telemetry.longitude")}
           value={latest && typeof latest.longitude === "number" ? latest.longitude.toFixed(6) : "---"}
+        />
+        <DataRow
+          label="Drone Course"
+          value={latest && typeof latest.gpsCourse === "number" ? `${latest.gpsCourse.toFixed(1)}°` : "---"}
         />
         <DataRow
           label={t("telemetry.timestamp")}

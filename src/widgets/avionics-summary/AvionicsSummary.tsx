@@ -50,40 +50,36 @@ export const AvionicsSummary = React.memo(function AvionicsSummary() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
           <TelemetryValue
             label={t("telemetry.altitude")}
-            value={latest ? latest.altitude.toFixed(1) : "---"}
+            value={latest && typeof latest.altitude === "number" ? latest.altitude.toFixed(1) : "---"}
             unit={t("units.meters")}
             size="lg"
           />
           <TelemetryValue
             label={t("telemetry.velocity")}
-            value={latest ? latest.velocity.toFixed(1) : "---"}
+            value={latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed.toFixed(1) : "---"}
             unit={t("units.metersPerSecond")}
             size="lg"
             color={
-              latest && latest.velocity < 0
+              latest && typeof latest.gpsSpeed === "number" && latest.gpsSpeed < 0
                 ? "var(--color-status-warning)"
                 : undefined
             }
           />
           <TelemetryValue
             label={t("telemetry.pressure1")}
-            value={latest ? latest.pressure1.toFixed(1) : "---"}
+            value={latest && typeof latest.pressure === "number" ? latest.pressure.toFixed(1) : "---"}
             unit={t("units.hectopascals")}
           />
         </div>
 
         {/* Secondary Data */}
         <DataRow
-          label={t("telemetry.pressure2")}
-          value={latest ? `${latest.pressure2.toFixed(1)} ${t("units.hectopascals")}` : "---"}
-        />
-        <DataRow
           label={t("telemetry.latitude")}
-          value={latest ? latest.latitude.toFixed(6) : "---"}
+          value={latest && typeof latest.latitude === "number" ? latest.latitude.toFixed(6) : "---"}
         />
         <DataRow
           label={t("telemetry.longitude")}
-          value={latest ? latest.longitude.toFixed(6) : "---"}
+          value={latest && typeof latest.longitude === "number" ? latest.longitude.toFixed(6) : "---"}
         />
         <DataRow
           label={t("telemetry.primaryParachute")}
@@ -113,7 +109,7 @@ export const AvionicsSummary = React.memo(function AvionicsSummary() {
         />
         <DataRow
           label={t("telemetry.timestamp")}
-          value={latest ? `${latest.timestamp} ${t("units.milliseconds")}` : "---"}
+          value={latest ? `${latest.timestampMs} ${t("units.milliseconds")}` : "---"}
         />
       </div>
     </PanelContainer>

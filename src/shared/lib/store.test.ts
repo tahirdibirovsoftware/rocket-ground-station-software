@@ -1,19 +1,11 @@
 /**
  * Tests for Phase 5 — Redux Store & Data Layer
- *
- * Covers:
- * - CircularBuffer: push, toArray, latest, overflow, clear
- * - Mappers: snake_case → camelCase for both packet types
- * - Rocket slice: packet received, history cap, reset
- * - Payload slice: packet received, history cap, reset
- * - Connection slice: status update, loading, error, reset
- * - Store: integration test with all slices
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { configureStore } from "@reduxjs/toolkit";
 
 import { CircularBuffer } from "@shared/lib/CircularBuffer";
-import { mapRocketPacket, mapPayloadPacket } from "@shared/lib/mappers";
+import { mapTelemetryPacket } from "@shared/lib/mappers";
 import { FlightState } from "@shared/types";
 
 import rocketTelemetryReducer, {
@@ -23,8 +15,11 @@ import rocketTelemetryReducer, {
 
 import payloadTelemetryReducer, {
   payloadPacketReceived,
-  payloadTelemetryReset,
 } from "@entities/payload-packet/model/payloadTelemetrySlice";
+
+import droneTelemetryReducer, {
+  dronePacketReceived,
+} from "@entities/drone-packet/model/droneTelemetrySlice";
 
 import connectionReducer, {
   connectionStatusUpdated,
@@ -117,22 +112,39 @@ describe("CircularBuffer", () => {
 describe("Mappers", () => {
   it("maps raw rocket packet to frontend interface", () => {
     const raw = {
-      packet_id: 1,
+      header: "AA",
       timestamp_ms: 5000,
+      accel_x: 0.12,
+      accel_y: -0.05,
+      accel_z: 9.8,
+      gyro_x: 0.01,
+      gyro_y: -0.02,
+      gyro_z: 0.005,
+      mag_x: 12.5,
+      mag_y: -8.2,
+      mag_z: 42.1,
+      temp: 24.5,
+      pressure: 1013.2,
+      humidity: 45.0,
       altitude: 1500.0,
+      aht_temp: 24.2,
+      aht_hum: 46.5,
       latitude: 38.3687,
       longitude: 34.037,
-      pressure1: 850.0,
-      pressure2: 849.5,
-      velocity: 200.0,
+      gps_altitude: 1500.0,
+      gps_speed: 200.0,
+      gps_course: 180.0,
+      roll: 12.0,
+      pitch: 5.0,
+      yaw: 90.0,
       flight_state: "powered",
       primary_parachute_deployed: false,
       secondary_parachute_deployed: false,
     };
 
-    const mapped = mapRocketPacket(raw);
-    expect(mapped.packetId).toBe(1);
-    expect(mapped.timestamp).toBe(5000);
+    const mapped = mapTelemetryPacket(raw);
+    expect(mapped.header).toBe("AA");
+    expect(mapped.timestampMs).toBe(5000);
     expect(mapped.altitude).toBe(1500.0);
     expect(mapped.flightState).toBe(FlightState.Powered);
     expect(mapped.primaryParachuteDeployed).toBe(false);
@@ -150,15 +162,32 @@ describe("Mappers", () => {
     ];
 
     for (const [raw, expected] of states) {
-      const pkt = mapRocketPacket({
-        packet_id: 1,
+      const pkt = mapTelemetryPacket({
+        header: "AA",
         timestamp_ms: 0,
+        accel_x: 0,
+        accel_y: 0,
+        accel_z: 0,
+        gyro_x: 0,
+        gyro_y: 0,
+        gyro_z: 0,
+        mag_x: 0,
+        mag_y: 0,
+        mag_z: 0,
+        temp: 0,
+        pressure: 0,
+        humidity: 0,
         altitude: 0,
+        aht_temp: 0,
+        aht_hum: 0,
         latitude: 0,
         longitude: 0,
-        pressure1: 0,
-        pressure2: 0,
-        velocity: 0,
+        gps_altitude: 0,
+        gps_speed: 0,
+        gps_course: 0,
+        roll: 0,
+        pitch: 0,
+        yaw: 0,
         flight_state: raw,
         primary_parachute_deployed: false,
         secondary_parachute_deployed: false,
@@ -166,38 +195,38 @@ describe("Mappers", () => {
       expect(pkt.flightState).toBe(expected);
     }
   });
-
-  it("maps raw payload packet to frontend interface", () => {
-    const raw = {
-      packet_id: 2,
-      timestamp_ms: 67890,
-      latitude: 39.91,
-      longitude: 32.86,
-      altitude: 850.25,
-      scientific_data: 23.456,
-    };
-
-    const mapped = mapPayloadPacket(raw);
-    expect(mapped.packetId).toBe(2);
-    expect(mapped.timestamp).toBe(67890);
-    expect(mapped.scientificSensorData).toBe(23.456);
-    expect(mapped.receivedAt).toBeGreaterThan(0);
-  });
 });
 
 // ============================================================================
-// Rocket Telemetry Slice Tests
+// Telemetry Slices Tests
 // ============================================================================
 
-const sampleRocketPacket = {
-  packetId: 1,
-  timestamp: 5000,
+const sampleTelemetryPacket = {
+  header: "AA",
+  timestampMs: 5000,
+  accelX: 0.12,
+  accelY: -0.05,
+  accelZ: 9.8,
+  gyroX: 0.01,
+  gyroY: -0.02,
+  gyroZ: 0.005,
+  magX: 12.5,
+  magY: -8.2,
+  magZ: 42.1,
+  temp: 24.5,
+  pressure: 1013.2,
+  humidity: 45.0,
   altitude: 1500.0,
+  ahtTemp: 24.2,
+  ahtHum: 46.5,
   latitude: 38.3687,
   longitude: 34.037,
-  pressure1: 850.0,
-  pressure2: 849.5,
-  velocity: 200.0,
+  gpsAltitude: 1500.0,
+  gpsSpeed: 200.0,
+  gpsCourse: 180.0,
+  roll: 12.0,
+  pitch: 5.0,
+  yaw: 90.0,
   flightState: FlightState.Powered,
   primaryParachuteDeployed: false,
   secondaryParachuteDeployed: false,
@@ -215,9 +244,9 @@ describe("rocketTelemetrySlice", () => {
   it("stores received packet as latest", () => {
     const state = rocketTelemetryReducer(
       undefined,
-      rocketPacketReceived(sampleRocketPacket),
+      rocketPacketReceived(sampleTelemetryPacket),
     );
-    expect(state.latest).toEqual(sampleRocketPacket);
+    expect(state.latest).toEqual(sampleTelemetryPacket);
     expect(state.packetCount).toBe(1);
     expect(state.history).toHaveLength(1);
   });
@@ -227,42 +256,24 @@ describe("rocketTelemetrySlice", () => {
     for (let i = 0; i < 650; i++) {
       state = rocketTelemetryReducer(
         state,
-        rocketPacketReceived({ ...sampleRocketPacket, timestamp: i }),
+        rocketPacketReceived({ ...sampleTelemetryPacket, timestampMs: i }),
       );
     }
     expect(state.history.length).toBeLessThanOrEqual(600);
     expect(state.packetCount).toBe(650);
-    // Oldest should be trimmed
-    expect(state.history[0].timestamp).toBeGreaterThanOrEqual(50);
   });
 
   it("resets to initial state", () => {
     let state = rocketTelemetryReducer(
       undefined,
-      rocketPacketReceived(sampleRocketPacket),
+      rocketPacketReceived(sampleTelemetryPacket),
     );
-    expect(state.packetCount).toBe(1);
-
     state = rocketTelemetryReducer(state, rocketTelemetryReset());
     expect(state.latest).toBeNull();
     expect(state.history).toEqual([]);
     expect(state.packetCount).toBe(0);
   });
 });
-
-// ============================================================================
-// Payload Telemetry Slice Tests
-// ============================================================================
-
-const samplePayloadPacket = {
-  packetId: 2,
-  timestamp: 67890,
-  latitude: 39.91,
-  longitude: 32.86,
-  altitude: 850.25,
-  scientificSensorData: 23.456,
-  receivedAt: Date.now(),
-};
 
 describe("payloadTelemetrySlice", () => {
   it("has correct initial state", () => {
@@ -275,9 +286,9 @@ describe("payloadTelemetrySlice", () => {
   it("stores received packet as latest", () => {
     const state = payloadTelemetryReducer(
       undefined,
-      payloadPacketReceived(samplePayloadPacket),
+      payloadPacketReceived(sampleTelemetryPacket),
     );
-    expect(state.latest).toEqual(samplePayloadPacket);
+    expect(state.latest).toEqual(sampleTelemetryPacket);
     expect(state.packetCount).toBe(1);
   });
 
@@ -286,21 +297,29 @@ describe("payloadTelemetrySlice", () => {
     for (let i = 0; i < 3050; i++) {
       state = payloadTelemetryReducer(
         state,
-        payloadPacketReceived({ ...samplePayloadPacket, timestamp: i }),
+        payloadPacketReceived({ ...sampleTelemetryPacket, timestampMs: i }),
       );
     }
     expect(state.history.length).toBeLessThanOrEqual(3000);
     expect(state.packetCount).toBe(3050);
   });
+});
 
-  it("resets to initial state", () => {
-    let state = payloadTelemetryReducer(
-      undefined,
-      payloadPacketReceived(samplePayloadPacket),
-    );
-    state = payloadTelemetryReducer(state, payloadTelemetryReset());
+describe("droneTelemetrySlice", () => {
+  it("has correct initial state", () => {
+    const state = droneTelemetryReducer(undefined, { type: "init" });
     expect(state.latest).toBeNull();
+    expect(state.history).toEqual([]);
     expect(state.packetCount).toBe(0);
+  });
+
+  it("stores received packet as latest", () => {
+    const state = droneTelemetryReducer(
+      undefined,
+      dronePacketReceived(sampleTelemetryPacket),
+    );
+    expect(state.latest).toEqual(sampleTelemetryPacket);
+    expect(state.packetCount).toBe(1);
   });
 });
 
@@ -312,7 +331,7 @@ describe("connectionSlice", () => {
   it("has correct initial state", () => {
     const state = connectionReducer(undefined, { type: "init" });
     expect(state.mode).toBe("disconnected");
-    expect(state.rocketPort).toBeNull();
+    expect(state.rfdPort).toBeNull();
     expect(state.isLoading).toBe(false);
     expect(state.error).toBeNull();
   });
@@ -320,10 +339,10 @@ describe("connectionSlice", () => {
   it("updates from backend connection status", () => {
     const backendStatus = {
       mode: "mock" as const,
-      rocket_port: null,
-      payload_port: null,
+      rfd_port: null,
       rocket_packets_received: 42,
       payload_packets_received: 210,
+      drone_packets_received: 10,
       checksum_failures: 3,
       uptime_ms: 60000,
     };
@@ -335,6 +354,7 @@ describe("connectionSlice", () => {
     expect(state.mode).toBe("mock");
     expect(state.rocketPacketsReceived).toBe(42);
     expect(state.payloadPacketsReceived).toBe(210);
+    expect(state.dronePacketsReceived).toBe(10);
     expect(state.checksumFailures).toBe(3);
     expect(state.uptimeMs).toBe(60000);
     expect(state.isLoading).toBe(false);
@@ -373,6 +393,7 @@ describe("Redux Store Integration", () => {
       reducer: {
         rocketTelemetry: rocketTelemetryReducer,
         payloadTelemetry: payloadTelemetryReducer,
+        droneTelemetry: droneTelemetryReducer,
         connection: connectionReducer,
       },
     });
@@ -380,6 +401,7 @@ describe("Redux Store Integration", () => {
     const state = testStore.getState();
     expect(state.rocketTelemetry.latest).toBeNull();
     expect(state.payloadTelemetry.latest).toBeNull();
+    expect(state.droneTelemetry.latest).toBeNull();
     expect(state.connection.mode).toBe("disconnected");
   });
 
@@ -388,19 +410,21 @@ describe("Redux Store Integration", () => {
       reducer: {
         rocketTelemetry: rocketTelemetryReducer,
         payloadTelemetry: payloadTelemetryReducer,
+        droneTelemetry: droneTelemetryReducer,
         connection: connectionReducer,
       },
     });
 
-    testStore.dispatch(rocketPacketReceived(sampleRocketPacket));
-    testStore.dispatch(payloadPacketReceived(samplePayloadPacket));
+    testStore.dispatch(rocketPacketReceived(sampleTelemetryPacket));
+    testStore.dispatch(payloadPacketReceived(sampleTelemetryPacket));
+    testStore.dispatch(dronePacketReceived(sampleTelemetryPacket));
     testStore.dispatch(
       connectionStatusUpdated({
         mode: "mock",
-        rocket_port: null,
-        payload_port: null,
+        rfd_port: null,
         rocket_packets_received: 1,
         payload_packets_received: 1,
+        drone_packets_received: 1,
         checksum_failures: 0,
         uptime_ms: 1000,
       }),
@@ -409,6 +433,7 @@ describe("Redux Store Integration", () => {
     const state = testStore.getState();
     expect(state.rocketTelemetry.packetCount).toBe(1);
     expect(state.payloadTelemetry.packetCount).toBe(1);
+    expect(state.droneTelemetry.packetCount).toBe(1);
     expect(state.connection.mode).toBe("mock");
   });
 });

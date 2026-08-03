@@ -7,14 +7,14 @@ import type { ConnectionStatus } from "@shared/hooks/useConnectionStatus";
 export interface ConnectionSliceState {
   /** Current connection mode. */
   mode: "disconnected" | "serial" | "mock";
-  /** Connected rocket port path. */
-  rocketPort: string | null;
-  /** Connected payload port path. */
-  payloadPort: string | null;
+  /** Connected RFD port path. */
+  rfdPort: string | null;
   /** Total rocket packets received (from backend). */
   rocketPacketsReceived: number;
   /** Total payload packets received (from backend). */
   payloadPacketsReceived: number;
+  /** Total drone packets received (from backend). */
+  dronePacketsReceived: number;
   /** Total checksum failures (from backend). */
   checksumFailures: number;
   /** Backend uptime in milliseconds. */
@@ -27,10 +27,10 @@ export interface ConnectionSliceState {
 
 const initialState: ConnectionSliceState = {
   mode: "disconnected",
-  rocketPort: null,
-  payloadPort: null,
+  rfdPort: null,
   rocketPacketsReceived: 0,
   payloadPacketsReceived: 0,
+  dronePacketsReceived: 0,
   checksumFailures: 0,
   uptimeMs: 0,
   isLoading: false,
@@ -45,10 +45,10 @@ export const connectionSlice = createSlice({
     connectionStatusUpdated(state, action: PayloadAction<ConnectionStatus>) {
       const s = action.payload;
       state.mode = s.mode;
-      state.rocketPort = s.rocket_port;
-      state.payloadPort = s.payload_port;
+      state.rfdPort = s.rfd_port;
       state.rocketPacketsReceived = s.rocket_packets_received;
       state.payloadPacketsReceived = s.payload_packets_received;
+      state.dronePacketsReceived = s.drone_packets_received;
       state.checksumFailures = s.checksum_failures;
       state.uptimeMs = s.uptime_ms;
       state.isLoading = false;

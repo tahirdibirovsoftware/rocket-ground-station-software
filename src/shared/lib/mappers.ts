@@ -1,35 +1,38 @@
 /**
  * Mappers — transform Rust snake_case JSON into frontend camelCase interfaces.
- *
- * The Rust backend serializes with serde (snake_case), but the frontend
- * TypeScript interfaces use camelCase. These mappers bridge the gap.
  */
-import type { RocketAvionicsPacket, PayloadScientificPacket } from "@shared/types";
+import type { TelemetryPacket } from "@shared/types";
 import { FlightState } from "@shared/types";
 
-/** Raw rocket packet shape from Rust serde JSON. */
-interface RawRocketPacket {
-  packet_id: number;
+interface RawTelemetryPacket {
+  header: string;
   timestamp_ms: number;
+  accel_x: number;
+  accel_y: number;
+  accel_z: number;
+  gyro_x: number;
+  gyro_y: number;
+  gyro_z: number;
+  mag_x: number;
+  mag_y: number;
+  mag_z: number;
+  temp: number;
+  pressure: number;
+  humidity: number;
   altitude: number;
+  aht_temp: number;
+  aht_hum: number;
   latitude: number;
   longitude: number;
-  pressure1: number;
-  pressure2: number;
-  velocity: number;
+  gps_altitude: number;
+  gps_speed: number;
+  gps_course: number;
+  roll: number;
+  pitch: number;
+  yaw: number;
   flight_state: string;
   primary_parachute_deployed: boolean;
   secondary_parachute_deployed: boolean;
-}
-
-/** Raw payload packet shape from Rust serde JSON. */
-interface RawPayloadPacket {
-  packet_id: number;
-  timestamp_ms: number;
-  latitude: number;
-  longitude: number;
-  altitude: number;
-  scientific_data: number;
 }
 
 const FLIGHT_STATE_MAP: Record<string, FlightState> = {
@@ -41,33 +44,37 @@ const FLIGHT_STATE_MAP: Record<string, FlightState> = {
   secondary_chute: FlightState.SecondaryChute,
 };
 
-/** Map a raw Rust rocket packet to the frontend interface. */
-export function mapRocketPacket(raw: RawRocketPacket): RocketAvionicsPacket {
+/** Map a raw Rust telemetry packet to the frontend interface. */
+export function mapTelemetryPacket(raw: RawTelemetryPacket): TelemetryPacket {
   return {
-    packetId: raw.packet_id,
-    timestamp: raw.timestamp_ms,
+    header: raw.header,
+    timestampMs: raw.timestamp_ms,
+    accelX: raw.accel_x,
+    accelY: raw.accel_y,
+    accelZ: raw.accel_z,
+    gyroX: raw.gyro_x,
+    gyroY: raw.gyro_y,
+    gyroZ: raw.gyro_z,
+    magX: raw.mag_x,
+    magY: raw.mag_y,
+    magZ: raw.mag_z,
+    temp: raw.temp,
+    pressure: raw.pressure,
+    humidity: raw.humidity,
     altitude: raw.altitude,
+    ahtTemp: raw.aht_temp,
+    ahtHum: raw.aht_hum,
     latitude: raw.latitude,
     longitude: raw.longitude,
-    pressure1: raw.pressure1,
-    pressure2: raw.pressure2,
-    velocity: raw.velocity,
+    gpsAltitude: raw.gps_altitude,
+    gpsSpeed: raw.gps_speed,
+    gpsCourse: raw.gps_course,
+    roll: raw.roll,
+    pitch: raw.pitch,
+    yaw: raw.yaw,
     flightState: FLIGHT_STATE_MAP[raw.flight_state] ?? FlightState.Pad,
     primaryParachuteDeployed: raw.primary_parachute_deployed,
     secondaryParachuteDeployed: raw.secondary_parachute_deployed,
-    receivedAt: Date.now(),
-  };
-}
-
-/** Map a raw Rust payload packet to the frontend interface. */
-export function mapPayloadPacket(raw: RawPayloadPacket): PayloadScientificPacket {
-  return {
-    packetId: raw.packet_id,
-    timestamp: raw.timestamp_ms,
-    latitude: raw.latitude,
-    longitude: raw.longitude,
-    altitude: raw.altitude,
-    scientificSensorData: raw.scientific_data,
     receivedAt: Date.now(),
   };
 }

@@ -1,12 +1,8 @@
 //! Tauri event emission — pushes telemetry data to the frontend.
-//!
-//! Events are emitted to the frontend webview using Tauri's event system.
-//! The frontend listens with `listen("event-name", callback)`.
 
 use tauri::{AppHandle, Emitter};
 
-use crate::protocol::rocket_packet::RocketPacket;
-use crate::protocol::payload_packet::PayloadPacket;
+use crate::protocol::telemetry_packet::TelemetryPacket;
 use super::state::ConnectionStatus;
 
 /// Event name for rocket avionics telemetry.
@@ -15,20 +11,30 @@ pub const EVENT_ROCKET_TELEMETRY: &str = "rocket-telemetry";
 /// Event name for payload scientific telemetry.
 pub const EVENT_PAYLOAD_TELEMETRY: &str = "payload-telemetry";
 
+/// Event name for drone telemetry.
+pub const EVENT_DRONE_TELEMETRY: &str = "drone-telemetry";
+
 /// Event name for connection status updates.
 pub const EVENT_CONNECTION_STATUS: &str = "connection-status";
 
 /// Emit a rocket telemetry packet to the frontend.
-pub fn emit_rocket_telemetry(app: &AppHandle, packet: &RocketPacket) {
+pub fn emit_rocket_telemetry(app: &AppHandle, packet: &TelemetryPacket) {
     if let Err(e) = app.emit(EVENT_ROCKET_TELEMETRY, packet) {
         log::error!("Failed to emit rocket telemetry: {e}");
     }
 }
 
 /// Emit a payload telemetry packet to the frontend.
-pub fn emit_payload_telemetry(app: &AppHandle, packet: &PayloadPacket) {
+pub fn emit_payload_telemetry(app: &AppHandle, packet: &TelemetryPacket) {
     if let Err(e) = app.emit(EVENT_PAYLOAD_TELEMETRY, packet) {
         log::error!("Failed to emit payload telemetry: {e}");
+    }
+}
+
+/// Emit a drone telemetry packet to the frontend.
+pub fn emit_drone_telemetry(app: &AppHandle, packet: &TelemetryPacket) {
+    if let Err(e) = app.emit(EVENT_DRONE_TELEMETRY, packet) {
+        log::error!("Failed to emit drone telemetry: {e}");
     }
 }
 

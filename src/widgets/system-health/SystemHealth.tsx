@@ -62,6 +62,10 @@ export const SystemHealth = React.memo(function SystemHealth() {
           value={stats.payloadPackets.toLocaleString()}
         />
         <DataRow
+          label={"Drone " + t("connection.packetsReceived")}
+          value={stats.dronePackets.toLocaleString()}
+        />
+        <DataRow
           label={t("connection.checksumFailures")}
           value={stats.checksumFailures.toLocaleString()}
           valueColor={

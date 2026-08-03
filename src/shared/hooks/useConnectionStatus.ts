@@ -9,10 +9,10 @@ import { useTauriEvent } from "./useTauriEvent";
 
 export interface ConnectionStatus {
   mode: "disconnected" | "serial" | "mock";
-  rocket_port: string | null;
-  payload_port: string | null;
+  rfd_port: string | null;
   rocket_packets_received: number;
   payload_packets_received: number;
+  drone_packets_received: number;
   checksum_failures: number;
   uptime_ms: number;
 }

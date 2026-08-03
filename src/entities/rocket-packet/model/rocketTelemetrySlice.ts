@@ -1,18 +1,13 @@
 /**
  * Rocket Telemetry Slice — Redux state for rocket avionics data.
- *
- * Manages:
- * - `latest`: The most recently received rocket packet
- * - `history`: Array of recent packets (capped at ROCKET_BUFFER_SIZE)
- * - `packetCount`: Total packets received in this session
  */
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { RocketAvionicsPacket } from "@shared/types";
+import type { TelemetryPacket } from "@shared/types";
 import { HISTORY_LIMITS } from "@shared/config/constants";
 
 export interface RocketTelemetryState {
-  latest: RocketAvionicsPacket | null;
-  history: RocketAvionicsPacket[];
+  latest: TelemetryPacket | null;
+  history: TelemetryPacket[];
   packetCount: number;
 }
 
@@ -27,7 +22,7 @@ export const rocketTelemetrySlice = createSlice({
   initialState,
   reducers: {
     /** Push a new rocket packet. Updates latest and appends to history. */
-    rocketPacketReceived(state, action: PayloadAction<RocketAvionicsPacket>) {
+    rocketPacketReceived(state, action: PayloadAction<TelemetryPacket>) {
       state.latest = action.payload;
       state.packetCount += 1;
 

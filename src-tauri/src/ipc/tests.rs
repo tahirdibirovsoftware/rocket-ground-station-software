@@ -50,10 +50,10 @@ fn connection_mode_deserialization() {
 fn connection_status_defaults() {
     let status = ConnectionStatus::default();
     assert_eq!(status.mode, ConnectionMode::Disconnected);
-    assert!(status.rocket_port.is_none());
-    assert!(status.payload_port.is_none());
+    assert!(status.rfd_port.is_none());
     assert_eq!(status.rocket_packets_received, 0);
     assert_eq!(status.payload_packets_received, 0);
+    assert_eq!(status.drone_packets_received, 0);
     assert_eq!(status.checksum_failures, 0);
     assert_eq!(status.uptime_ms, 0);
 }
@@ -62,10 +62,10 @@ fn connection_status_defaults() {
 fn connection_status_serialization() {
     let status = ConnectionStatus {
         mode: ConnectionMode::Serial,
-        rocket_port: Some("/dev/ttyUSB0".to_string()),
-        payload_port: Some("/dev/ttyUSB1".to_string()),
+        rfd_port: Some("/dev/ttyUSB0".to_string()),
         rocket_packets_received: 42,
         payload_packets_received: 210,
+        drone_packets_received: 10,
         checksum_failures: 3,
         uptime_ms: 60000,
     };
@@ -73,7 +73,6 @@ fn connection_status_serialization() {
     let json = serde_json::to_string(&status).unwrap();
     assert!(json.contains("\"serial\""));
     assert!(json.contains("ttyUSB0"));
-    assert!(json.contains("ttyUSB1"));
     assert!(json.contains("42"));
     assert!(json.contains("210"));
 
@@ -87,8 +86,7 @@ fn connection_status_serialization() {
 fn connection_status_null_ports() {
     let status = ConnectionStatus::default();
     let json = serde_json::to_string(&status).unwrap();
-    assert!(json.contains("\"rocket_port\":null"));
-    assert!(json.contains("\"payload_port\":null"));
+    assert!(json.contains("\"rfd_port\":null"));
 }
 
 // ============================================================================
@@ -99,8 +97,8 @@ fn connection_status_null_ports() {
 fn app_state_initial_values() {
     let state = AppState::new();
     assert!(!state.mock_state.is_running());
-    assert!(!state.serial_active.load(std::sync::atomic::Ordering::Relaxed));
-    assert!(!state.cancel_token.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(!state.rfd_cancel.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(!state.mock_cancel.load(std::sync::atomic::Ordering::Relaxed));
 
     let status = state.connection_status.lock().unwrap();
     assert_eq!(status.mode, ConnectionMode::Disconnected);
@@ -112,38 +110,13 @@ fn app_state_sync_stats() {
 
     // Feed some packets through the parser
     {
-        use crate::protocol::rocket_packet::{build_rocket_packet, FlightState, RocketPacket, ROCKET_PACKET_ID};
-        use crate::protocol::payload_packet::{build_payload_packet, PayloadPacket, PAYLOAD_PACKET_ID};
-
-        let rocket = RocketPacket {
-            packet_id: ROCKET_PACKET_ID,
-            timestamp_ms: 1000,
-            altitude: 500.0,
-            latitude: 38.0,
-            longitude: 34.0,
-            pressure1: 950.0,
-            pressure2: 949.0,
-            velocity: 100.0,
-            flight_state: FlightState::Powered,
-            primary_parachute_deployed: false,
-            secondary_parachute_deployed: false,
-        };
-        let rocket_bytes = build_rocket_packet(&rocket);
-
-        let payload = PayloadPacket {
-            packet_id: PAYLOAD_PACKET_ID,
-            timestamp_ms: 1000,
-            latitude: 38.0,
-            longitude: 34.0,
-            altitude: 490.0,
-            scientific_data: 25.0,
-        };
-        let payload_bytes = build_payload_packet(&payload);
+        let rocket_bytes = b"AA,1000,0.12,-0.05,25.0,0.01,-0.02,0.005,12.5,-8.2,42.1,24.5,950.0,45.0,500.0,24.2,46.5,38.0,34.0,500.0,100.0,180.0,12.0,5.0,90.0\n";
+        let payload_bytes = b"BB,1000,-0.05,0.08,9.8,-0.01,0.01,0.02,10.4,-9.5,40.0,25.0,950.0,50.0,490.0,23.5,51.0,38.0,34.0,490.0,0.0,0.0,0.0,0.0,0.0\n";
 
         let mut parser = state.frame_parser.lock().unwrap();
-        parser.feed(&rocket_bytes);
-        parser.feed(&payload_bytes);
-        parser.feed(&payload_bytes);
+        parser.feed(rocket_bytes);
+        parser.feed(payload_bytes);
+        parser.feed(payload_bytes);
     }
 
     // Sync and check
@@ -187,9 +160,9 @@ fn event_names_match_frontend_constants() {
 #[test]
 fn cancel_token_cross_thread() {
     let state = AppState::new();
-    let token = state.cancel_token.clone();
+    let token = state.rfd_cancel.clone();
 
     assert!(!token.load(std::sync::atomic::Ordering::Relaxed));
-    state.cancel_token.store(true, std::sync::atomic::Ordering::Relaxed);
+    state.rfd_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     assert!(token.load(std::sync::atomic::Ordering::Relaxed));
 }

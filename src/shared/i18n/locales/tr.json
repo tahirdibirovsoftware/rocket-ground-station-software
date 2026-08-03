@@ -6,6 +6,7 @@
   "nav": {
     "teamDashboard": "Takim Paneli",
     "refereeDashboard": "Hakem Paneli",
+    "flightArtifacts": "Uçuş Kayıtları",
     "settings": "Ayarlar"
   },
   "connection": {
@@ -62,7 +63,12 @@
       "title": "Takim Paneli",
       "rawPacketLog": "Ham Paket Kaydi",
       "systemHealth": "Sistem Sagligi",
-      "diagnostics": "Tani"
+      "diagnostics": "Tani",
+      "payloadCamera": "Faydalı Yük Kamera Yayını",
+      "cameraScanning": "Cihazlar Taranıyor...",
+      "cameraDisconnected": "Kamera Bağlı Değil",
+      "cameraHint": "Yayını başlatmak için harici bir USB faydalı yük/roket kamerası bağlayın.",
+      "cameraRescan": "Kamera cihazlarını yeniden tara"
     },
     "referee": {
       "title": "Hakem Paneli",

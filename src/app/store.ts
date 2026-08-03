@@ -8,12 +8,14 @@ import { useDispatch, useSelector, type TypedUseSelectorHook } from "react-redux
 
 import rocketTelemetryReducer from "@entities/rocket-packet/model/rocketTelemetrySlice";
 import payloadTelemetryReducer from "@entities/payload-packet/model/payloadTelemetrySlice";
+import droneTelemetryReducer from "@entities/drone-packet/model/droneTelemetrySlice";
 import connectionReducer from "@entities/connection/model/connectionSlice";
 
 export const store = configureStore({
   reducer: {
     rocketTelemetry: rocketTelemetryReducer,
     payloadTelemetry: payloadTelemetryReducer,
+    droneTelemetry: droneTelemetryReducer,
     connection: connectionReducer,
   },
   middleware: (getDefaultMiddleware) =>

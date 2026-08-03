@@ -1,28 +1,18 @@
 //! Serial port reader — byte-level framing and packet extraction.
 //!
-//! The reader scans an incoming byte stream for start bytes (`0xAA` for rocket,
-//! `0xBB` for payload), accumulates the correct number of bytes, validates the
-//! checksum, and returns parsed packets.
-//!
-//! This module provides both:
-//! - A synchronous `FrameParser` that works on any `&[u8]` input (testable)
-//! - An async `SerialReader` that wraps a real serial port with tokio
+//! The reader scans an incoming byte stream for line endings ('\n'),
+//! extracts lines starting with "AA,", "BB,", or "CC,", parses them as CSV,
+//! and runs a flight state estimator on the Rocket ("AA") packets.
 
-use crate::protocol::checksum::validate_checksum;
-use crate::protocol::rocket_packet::{
-    parse_rocket_packet, RocketPacket,
-    ROCKET_PACKET_SIZE, ROCKET_START_BYTE,
-};
-use crate::protocol::payload_packet::{
-    parse_payload_packet, PayloadPacket,
-    PAYLOAD_PACKET_SIZE, PAYLOAD_START_BYTE,
-};
+use crate::protocol::telemetry_packet::TelemetryPacket;
+use crate::protocol::rocket_packet::FlightState;
 
 /// A successfully parsed packet from the serial stream.
 #[derive(Debug, Clone)]
 pub enum ParsedPacket {
-    Rocket(RocketPacket),
-    Payload(PayloadPacket),
+    Rocket(TelemetryPacket),
+    Payload(TelemetryPacket),
+    Drone(TelemetryPacket),
 }
 
 /// Statistics tracked by the frame parser.
@@ -30,93 +20,75 @@ pub enum ParsedPacket {
 pub struct ReaderStats {
     pub rocket_packets: u64,
     pub payload_packets: u64,
+    pub drone_packets: u64,
     pub checksum_failures: u64,
     pub framing_errors: u64,
     pub bytes_processed: u64,
 }
 
-/// State machine for extracting framed packets from a raw byte stream.
-///
-/// The parser scans for start bytes, accumulates frame data, validates,
-/// and emits parsed packets. Handles partial reads and stream corruption
-/// gracefully by discarding invalid bytes and re-syncing on the next
-/// start byte.
+/// State machine for extracting framed CSV packets from a raw byte stream.
 #[derive(Debug)]
 pub struct FrameParser {
-    /// Internal buffer for accumulating frame bytes.
+    /// Internal buffer for accumulating line bytes.
     buffer: Vec<u8>,
-    /// Current state of the parser.
-    state: FrameState,
     /// Cumulative statistics.
     pub stats: ReaderStats,
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FrameState {
-    /// Scanning for a start byte (0xAA or 0xBB).
-    Scanning,
-    /// Accumulating bytes for an identified frame type.
-    Accumulating {
-        /// Expected total frame length.
-        expected_len: usize,
-    },
+    // Flight State Estimator State
+    max_altitude: f32,
+    last_altitude: f32,
+    current_flight_state: FlightState,
+    primary_parachute_deployed: bool,
+    secondary_parachute_deployed: bool,
 }
 
 impl FrameParser {
     /// Create a new frame parser.
     pub fn new() -> Self {
         Self {
-            buffer: Vec::with_capacity(64),
-            state: FrameState::Scanning,
+            buffer: Vec::with_capacity(256),
             stats: ReaderStats::default(),
+            max_altitude: 0.0,
+            last_altitude: 0.0,
+            current_flight_state: FlightState::Pad,
+            primary_parachute_deployed: false,
+            secondary_parachute_deployed: false,
         }
     }
 
     /// Feed raw bytes into the parser and extract any complete packets.
-    ///
-    /// Returns a vector of successfully parsed packets. Bytes that don't
-    /// form valid packets are silently discarded (stats are updated).
     pub fn feed(&mut self, data: &[u8]) -> Vec<ParsedPacket> {
         let mut packets = Vec::new();
 
         for &byte in data {
             self.stats.bytes_processed += 1;
 
-            match self.state {
-                FrameState::Scanning => {
-                    match byte {
-                        ROCKET_START_BYTE => {
-                            self.buffer.clear();
-                            self.buffer.push(byte);
-                            self.state = FrameState::Accumulating {
-                                expected_len: ROCKET_PACKET_SIZE,
-                            };
-                        }
-                        PAYLOAD_START_BYTE => {
-                            self.buffer.clear();
-                            self.buffer.push(byte);
-                            self.state = FrameState::Accumulating {
-                                expected_len: PAYLOAD_PACKET_SIZE,
-                            };
-                        }
-                        _ => {
-                            // Discard byte, not a start byte
+            if byte == b'\n' {
+                let mut start_idx = None;
+                for header in &[b"AA,", b"BB,", b"CC,"] {
+                    if let Some(pos) = self.buffer.windows(3).position(|w| w == *header) {
+                        if start_idx.is_none() || pos < start_idx.unwrap() {
+                            start_idx = Some(pos);
                         }
                     }
                 }
 
-                FrameState::Accumulating { expected_len } => {
-                    self.buffer.push(byte);
-
-                    if self.buffer.len() == expected_len {
-                        // Frame complete — attempt to parse
-                        if let Some(pkt) = self.try_parse_frame() {
+                if let Some(idx) = start_idx {
+                    if let Ok(line_str) = std::str::from_utf8(&self.buffer[idx..]) {
+                        let line_owned = line_str.to_string();
+                        if let Some(pkt) = self.parse_line(&line_owned) {
                             packets.push(pkt);
                         }
-                        // Reset to scanning regardless of parse success
-                        self.buffer.clear();
-                        self.state = FrameState::Scanning;
                     }
+                }
+                self.buffer.clear();
+            } else {
+                // Prevent buffer from growing indefinitely on raw garbage streams
+                if self.buffer.len() < 1024 {
+                    self.buffer.push(byte);
+                } else {
+                    self.buffer.clear();
+                    self.stats.framing_errors += 1;
                 }
             }
         }
@@ -124,55 +96,106 @@ impl FrameParser {
         packets
     }
 
-    /// Attempt to parse the current buffer as a valid packet.
-    fn try_parse_frame(&mut self) -> Option<ParsedPacket> {
-        let data = &self.buffer;
-
-        // First check the checksum before full parsing
-        if !validate_checksum(data) {
-            self.stats.checksum_failures += 1;
-            log::debug!(
-                "Checksum failure on frame starting with 0x{:02X} ({} bytes)",
-                data[0],
-                data.len()
-            );
-            return None;
+    /// Attempt to parse a line and identify the packet.
+    fn parse_line(&mut self, line: &str) -> Option<ParsedPacket> {
+        // Find the start of our headers in case there is garbage before it
+        let mut start_idx = None;
+        for header in &["AA,", "BB,", "CC,"] {
+            if let Some(pos) = line.find(header) {
+                if start_idx.is_none() || pos < start_idx.unwrap() {
+                    start_idx = Some(pos);
+                }
+            }
         }
 
-        match data[0] {
-            ROCKET_START_BYTE => match parse_rocket_packet(data) {
-                Ok(pkt) => {
+        let clean_line = match start_idx {
+            Some(idx) => &line[idx..],
+            None => return None,
+        };
+
+        if let Some(mut packet) = TelemetryPacket::parse(clean_line) {
+            match packet.header.as_str() {
+                "AA" => {
+                    self.estimate_rocket_state(&mut packet);
                     self.stats.rocket_packets += 1;
-                    Some(ParsedPacket::Rocket(pkt))
+                    Some(ParsedPacket::Rocket(packet))
                 }
-                Err(e) => {
-                    self.stats.framing_errors += 1;
-                    log::debug!("Rocket parse error: {e}");
-                    None
-                }
-            },
-            PAYLOAD_START_BYTE => match parse_payload_packet(data) {
-                Ok(pkt) => {
+                "BB" => {
                     self.stats.payload_packets += 1;
-                    Some(ParsedPacket::Payload(pkt))
+                    Some(ParsedPacket::Payload(packet))
                 }
-                Err(e) => {
+                "CC" => {
+                    self.stats.drone_packets += 1;
+                    Some(ParsedPacket::Drone(packet))
+                }
+                _ => {
                     self.stats.framing_errors += 1;
-                    log::debug!("Payload parse error: {e}");
                     None
                 }
-            },
-            _ => {
-                self.stats.framing_errors += 1;
-                None
             }
+        } else {
+            self.stats.framing_errors += 1;
+            None
         }
     }
 
-    /// Reset the parser state (e.g., after a disconnect).
+    /// Estimate the rocket flight phase.
+    fn estimate_rocket_state(&mut self, packet: &mut TelemetryPacket) {
+        let alt = packet.altitude;
+
+        // 1. Update max altitude
+        if alt > self.max_altitude {
+            self.max_altitude = alt;
+        }
+
+        // 2. State transition logic
+        match self.current_flight_state {
+            FlightState::Pad => {
+                if alt > 15.0 {
+                    self.current_flight_state = FlightState::Powered;
+                }
+            }
+            FlightState::Powered => {
+                if alt >= 1800.0 {
+                    self.current_flight_state = FlightState::Unpowered;
+                }
+            }
+            FlightState::Unpowered => {
+                if self.max_altitude > 250.0 && alt < self.max_altitude - 10.0 {
+                    self.current_flight_state = FlightState::Apogee;
+                }
+            }
+            FlightState::Apogee => {
+                self.current_flight_state = FlightState::PrimaryChute;
+                self.primary_parachute_deployed = true;
+            }
+            FlightState::PrimaryChute => {
+                if alt <= 1700.0 {
+                    self.current_flight_state = FlightState::SecondaryChute;
+                    self.secondary_parachute_deployed = true;
+                }
+            }
+            FlightState::SecondaryChute => {
+                // Remains landed
+            }
+        }
+
+        // Apply estimated states to the packet
+        packet.flight_state = self.current_flight_state;
+        packet.primary_parachute_deployed = self.primary_parachute_deployed;
+        packet.secondary_parachute_deployed = self.secondary_parachute_deployed;
+
+        self.last_altitude = alt;
+    }
+
+    /// Reset the parser state.
     pub fn reset(&mut self) {
         self.buffer.clear();
-        self.state = FrameState::Scanning;
+        self.max_altitude = 0.0;
+        self.last_altitude = 0.0;
+        self.current_flight_state = FlightState::Pad;
+        self.primary_parachute_deployed = false;
+        self.secondary_parachute_deployed = false;
     }
 
     /// Reset the parser state and statistics.
@@ -212,8 +235,6 @@ impl std::fmt::Display for SerialReaderError {
 impl std::error::Error for SerialReaderError {}
 
 /// Open a serial port with the given configuration.
-///
-/// Returns a boxed `SerialPort` trait object suitable for reading.
 pub fn open_serial_port(
     config: &super::config::SerialPortConfig,
 ) -> Result<Box<dyn serialport::SerialPort>, SerialReaderError> {

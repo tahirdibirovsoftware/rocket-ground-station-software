@@ -13,6 +13,7 @@ import {
   Activity,
   Radio,
   Gauge,
+  FolderArchive,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -59,6 +60,11 @@ export const DashboardLayout = React.memo(function DashboardLayout() {
       to: ROUTES.REFEREE_DASHBOARD,
       label: t("nav.refereeDashboard"),
       icon: <Gauge size={18} />,
+    },
+    {
+      to: ROUTES.FLIGHT_ARTIFACTS,
+      label: t("nav.flightArtifacts", "Flight Artifacts"),
+      icon: <FolderArchive size={18} />,
     },
   ];
 

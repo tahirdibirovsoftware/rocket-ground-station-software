@@ -8,6 +8,7 @@ pub mod mock;
 pub mod serial;
 pub mod logger;
 pub mod ipc;
+pub mod camera;
 
 use ipc::state::AppState;
 use ipc::commands;
@@ -19,14 +20,19 @@ pub fn run() {
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::list_serial_ports,
-            commands::connect_rocket,
-            commands::disconnect_rocket,
-            commands::connect_payload,
-            commands::disconnect_payload,
+            commands::connect_rfd,
+            commands::disconnect_rfd,
             commands::start_mock,
             commands::stop_mock,
             commands::reset_mock,
             commands::get_connection_status,
+            commands::list_cameras,
+            commands::start_camera,
+            commands::stop_camera,
+            commands::list_flight_artifacts,
+            commands::open_artifact_folder,
+            commands::delete_artifact_folder,
+            commands::open_artifact_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running AZST Ground Station");

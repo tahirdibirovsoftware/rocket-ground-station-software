@@ -3,11 +3,11 @@ import { ROUTES } from "@shared/config/constants";
 import { DashboardLayout } from "@shared/ui";
 import { TeamDashboardPage } from "@pages/team-dashboard/TeamDashboardPage";
 import { RefereeDashboardPage } from "@pages/referee-dashboard/RefereeDashboardPage";
+import { FlightArtifactsPage } from "@pages/flight-artifacts/FlightArtifactsPage";
 
 /**
  * Application route definitions.
- * Both dashboard views are nested inside the DashboardLayout shell
- * (sidebar + top bar + Outlet).
+ * All dashboard views are nested inside the DashboardLayout shell.
  */
 export function AppRoutes() {
   return (
@@ -24,6 +24,10 @@ export function AppRoutes() {
         <Route
           path={ROUTES.REFEREE_DASHBOARD}
           element={<RefereeDashboardPage />}
+        />
+        <Route
+          path={ROUTES.FLIGHT_ARTIFACTS}
+          element={<FlightArtifactsPage />}
         />
       </Route>
     </Routes>

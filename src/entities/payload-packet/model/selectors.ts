@@ -28,7 +28,7 @@ export const selectPayloadPacketCount = createSelector(
 export const selectScientificDataHistory = createSelector(
   selectPayloadHistory,
   (history) =>
-    history.map((p) => ({ t: p.timestamp, v: p.scientificSensorData })),
+    history.map((p) => ({ t: p.timestampMs, v: p.temp })),
 );
 
 /** Select the latest payload GPS position. */

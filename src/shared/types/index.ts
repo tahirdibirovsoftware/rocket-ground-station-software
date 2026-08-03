@@ -2,7 +2,6 @@
  * AZST Ground Station — Global Type Definitions
  *
  * Domain types for telemetry packets, flight states, and connection management.
- * These mirror the Rust backend binary schemas (little-endian).
  */
 
 /* ── Flight State Enum ── */
@@ -15,31 +14,37 @@ export enum FlightState {
   SecondaryChute = 5,
 }
 
-/* ── Rocket Avionics Packet (36 bytes on wire) ── */
-export interface RocketAvionicsPacket {
-  packetId: number;
-  timestamp: number;        // ms since boot
-  altitude: number;         // meters
+/* ── Telemetry Packet (ASCII CSV parsed schema) ── */
+export interface TelemetryPacket {
+  header: string;                  // "AA", "BB", "CC"
+  timestampMs: number;
+  accelX: number;
+  accelY: number;
+  accelZ: number;
+  gyroX: number;
+  gyroY: number;
+  gyroZ: number;
+  magX: number;
+  magY: number;
+  magZ: number;
+  temp: number;
+  pressure: number;
+  humidity: number;
+  altitude: number;
+  ahtTemp: number;
+  ahtHum: number;
   latitude: number;
   longitude: number;
-  pressure1: number;        // hPa
-  pressure2: number;        // hPa
-  velocity: number;         // m/s
+  gpsAltitude: number;
+  gpsSpeed: number;
+  gpsCourse: number;
+  roll: number;
+  pitch: number;
+  yaw: number;
   flightState: FlightState;
   primaryParachuteDeployed: boolean;
   secondaryParachuteDeployed: boolean;
-  receivedAt: number;       // frontend timestamp (Date.now())
-}
-
-/* ── Payload Scientific Packet (24 bytes on wire) ── */
-export interface PayloadScientificPacket {
-  packetId: number;
-  timestamp: number;        // ms since boot
-  latitude: number;
-  longitude: number;
-  altitude: number;         // meters
-  scientificSensorData: number;
-  receivedAt: number;       // frontend timestamp (Date.now())
+  receivedAt: number;              // frontend timestamp (Date.now())
 }
 
 /* ── Connection State ── */
@@ -57,19 +62,13 @@ export interface SerialPortInfo {
 }
 
 export interface ConnectionState {
-  rocketPort: {
+  rfdPort: {
     status: ConnectionStatus;
     path: string | null;
     baudRate: number;
-    packetsReceived: number;
-    checksumFailures: number;
-    lastPacketAt: number | null;
-  };
-  payloadPort: {
-    status: ConnectionStatus;
-    path: string | null;
-    baudRate: number;
-    packetsReceived: number;
+    rocketPacketsReceived: number;
+    payloadPacketsReceived: number;
+    dronePacketsReceived: number;
     checksumFailures: number;
     lastPacketAt: number | null;
   };

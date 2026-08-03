@@ -1,18 +1,13 @@
 /**
  * Payload Telemetry Slice — Redux state for payload scientific data.
- *
- * Manages:
- * - `latest`: The most recently received payload packet
- * - `history`: Array of recent packets (capped at PAYLOAD_BUFFER_SIZE)
- * - `packetCount`: Total packets received in this session
  */
 import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import type { PayloadScientificPacket } from "@shared/types";
+import type { TelemetryPacket } from "@shared/types";
 import { HISTORY_LIMITS } from "@shared/config/constants";
 
 export interface PayloadTelemetryState {
-  latest: PayloadScientificPacket | null;
-  history: PayloadScientificPacket[];
+  latest: TelemetryPacket | null;
+  history: TelemetryPacket[];
   packetCount: number;
 }
 
@@ -27,13 +22,11 @@ export const payloadTelemetrySlice = createSlice({
   initialState,
   reducers: {
     /** Push a new payload packet. Updates latest and appends to history. */
-    payloadPacketReceived(
-      state,
-      action: PayloadAction<PayloadScientificPacket>,
-    ) {
+    payloadPacketReceived(state, action: PayloadAction<TelemetryPacket>) {
       state.latest = action.payload;
       state.packetCount += 1;
 
+      // Maintain fixed-size history
       state.history.push(action.payload);
       if (state.history.length > HISTORY_LIMITS.PAYLOAD_BUFFER_SIZE) {
         state.history = state.history.slice(-HISTORY_LIMITS.PAYLOAD_BUFFER_SIZE);

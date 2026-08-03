@@ -1,7 +1,5 @@
 /**
  * ConnectionPanel — Serial port connection controls and mock mode toggle.
- *
- * Provides hybrid global and independent port connection handlers flawlessly.
  */
 import React, { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,17 +18,12 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
   const dispatch = useAppDispatch();
   const connState = useAppSelector((state) => state.connection);
 
-  const rocketConnected = !!connState.rocketPort;
-  const payloadConnected = !!connState.payloadPort;
+  const rfdConnected = !!connState.rfdPort;
   const isMock = connState.mode === "mock";
-  const anyConnected = rocketConnected || payloadConnected;
+  const anyConnected = rfdConnected;
 
-  const [rocketPortInput, setRocketPortInput] = useState("");
-  const [rocketBaud, setRocketBaud] = useState("115200");
-
-  const [payloadPortInput, setPayloadPortInput] = useState("");
-  const [payloadBaud, setPayloadBaud] = useState("115200");
-
+  const [rfdPortInput, setRfdPortInput] = useState("");
+  const [rfdBaud, setRfdBaud] = useState("115200");
   const [availablePorts, setAvailablePorts] = useState<any[]>([]);
 
   useEffect(() => {
@@ -52,19 +45,11 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
     };
   }, []);
 
-  const connectRocket = async () => {
-    if (!rocketPortInput) throw new Error("Rocket port not selected");
-    await invoke(IPC_COMMANDS.CONNECT_ROCKET, {
-      port: rocketPortInput,
-      baudRate: parseInt(rocketBaud, 10),
-    });
-  };
-
-  const connectPayload = async () => {
-    if (!payloadPortInput) throw new Error("Payload port not selected");
-    await invoke(IPC_COMMANDS.CONNECT_PAYLOAD, {
-      port: payloadPortInput,
-      baudRate: parseInt(payloadBaud, 10),
+  const connectRfd = async () => {
+    if (!rfdPortInput) throw new Error("RFD port not selected");
+    await invoke(IPC_COMMANDS.CONNECT_RFD, {
+      port: rfdPortInput,
+      baudRate: parseInt(rfdBaud, 10),
     });
   };
 
@@ -72,59 +57,31 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
     dispatch(connectionLoading());
     try {
       if (anyConnected) {
-        // Disconnect all connected
-        if (rocketConnected) await invoke(IPC_COMMANDS.DISCONNECT_ROCKET);
-        if (payloadConnected) await invoke(IPC_COMMANDS.DISCONNECT_PAYLOAD);
+        if (rfdConnected) await invoke(IPC_COMMANDS.DISCONNECT_RFD);
       } else {
-        // Connect all requested
-        const promises = [];
-        if (rocketPortInput) promises.push(connectRocket());
-        if (payloadPortInput) promises.push(connectPayload());
-
-        if (promises.length === 0) {
-          dispatch(connectionError("Please select at least one port hardware manually."));
-          return;
-        }
-
-        const results = await Promise.allSettled(promises);
-        const errors = results
-          .filter((r) => r.status === "rejected")
-          .map((r: any) => String(r.reason));
-
-        if (errors.length > 0) {
-          dispatch(connectionError(errors.join(" | ")));
+        if (rfdPortInput) {
+          await connectRfd();
+        } else {
+          dispatch(connectionError("Please select RFD serial port."));
         }
       }
     } catch (e) {
       dispatch(connectionError(String(e)));
     }
-  }, [dispatch, rocketConnected, payloadConnected, anyConnected, rocketPortInput, payloadPortInput, rocketBaud, payloadBaud]);
+  }, [dispatch, rfdConnected, anyConnected, rfdPortInput, rfdBaud]);
 
-  const toggleRocket = useCallback(async () => {
+  const toggleRfd = useCallback(async () => {
     dispatch(connectionLoading());
     try {
-      if (rocketConnected) {
-        await invoke(IPC_COMMANDS.DISCONNECT_ROCKET);
+      if (rfdConnected) {
+        await invoke(IPC_COMMANDS.DISCONNECT_RFD);
       } else {
-        await connectRocket();
+        await connectRfd();
       }
     } catch(e) {
       dispatch(connectionError(String(e)));
     }
-  }, [dispatch, rocketConnected, rocketPortInput, rocketBaud]);
-
-  const togglePayload = useCallback(async () => {
-    dispatch(connectionLoading());
-    try {
-      if (payloadConnected) {
-        await invoke(IPC_COMMANDS.DISCONNECT_PAYLOAD);
-      } else {
-        await connectPayload();
-      }
-    } catch(e) {
-      dispatch(connectionError(String(e)));
-    }
-  }, [dispatch, payloadConnected, payloadPortInput, payloadBaud]);
+  }, [dispatch, rfdConnected, rfdPortInput, rfdBaud]);
 
   const handleStartMock = useCallback(async () => {
     dispatch(connectionLoading());
@@ -207,7 +164,7 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
                 onClick={handleGlobalToggle}
                 disabled={isMock}
               >
-                <Plug size={12} /> GLOBAL CONNECT
+                <Plug size={12} /> CONNECT RFD
               </button>
             ) : (
               <button
@@ -219,7 +176,7 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
                 }}
                 onClick={handleGlobalToggle}
               >
-                <Unplug size={12} /> DISCONNECT ALL
+                <Unplug size={12} /> DISCONNECT RFD
               </button>
           )}
 
@@ -236,50 +193,26 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
           </div>
         </div>
 
-        {/* Rocket Card */}
+        {/* RFD Receiver Card */}
         <div style={cardStyle}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
             <div>
-              <label style={labelStyle}>Rocket Port</label>
-              <select style={inputStyle} value={rocketPortInput} onChange={(e) => setRocketPortInput(e.target.value)} disabled={rocketConnected || isMock}>
+              <label style={labelStyle}>RFD Serial Port</label>
+              <select style={inputStyle} value={rfdPortInput} onChange={(e) => setRfdPortInput(e.target.value)} disabled={rfdConnected || isMock}>
                 {renderPortOptions()}
               </select>
             </div>
             <div>
               <label style={labelStyle}>Baud Rate</label>
-              <select style={inputStyle} value={rocketBaud} onChange={(e) => setRocketBaud(e.target.value)} disabled={rocketConnected || isMock}>
+              <select style={inputStyle} value={rfdBaud} onChange={(e) => setRfdBaud(e.target.value)} disabled={rfdConnected || isMock}>
                 {renderBaudOptions()}
               </select>
             </div>
           </div>
           <div style={{ marginTop: "0.5rem" }}>
-             <button style={rocketConnected ? disconnectBtnStyle : connectBtnStyle} onClick={toggleRocket} disabled={isMock || (!rocketPortInput && !rocketConnected)}>
-               {rocketConnected ? <Unplug size={12}/> : <Plug size={12}/>}
-               {rocketConnected ? " DISCONNECT ROCKET" : " CONNECT ROCKET"}
-             </button>
-          </div>
-        </div>
-
-        {/* Payload Card */}
-        <div style={cardStyle}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-            <div>
-              <label style={labelStyle}>Payload Port</label>
-              <select style={inputStyle} value={payloadPortInput} onChange={(e) => setPayloadPortInput(e.target.value)} disabled={payloadConnected || isMock}>
-                {renderPortOptions()}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Baud Rate</label>
-              <select style={inputStyle} value={payloadBaud} onChange={(e) => setPayloadBaud(e.target.value)} disabled={payloadConnected || isMock}>
-                {renderBaudOptions()}
-              </select>
-            </div>
-          </div>
-          <div style={{ marginTop: "0.5rem" }}>
-             <button style={payloadConnected ? disconnectBtnStyle : connectBtnStyle} onClick={togglePayload} disabled={isMock || (!payloadPortInput && !payloadConnected)}>
-               {payloadConnected ? <Unplug size={12}/> : <Plug size={12}/>}
-               {payloadConnected ? " DISCONNECT PAYLOAD" : " CONNECT PAYLOAD"}
+             <button style={rfdConnected ? disconnectBtnStyle : connectBtnStyle} onClick={toggleRfd} disabled={isMock || (!rfdPortInput && !rfdConnected)}>
+               {rfdConnected ? <Unplug size={12}/> : <Plug size={12}/>}
+               {rfdConnected ? " DISCONNECT RFD RECEIVER" : " CONNECT RFD RECEIVER"}
              </button>
           </div>
         </div>

@@ -1,8 +1,7 @@
 /**
- * DualGpsPanel — Side-by-side rocket vs payload GPS coordinates.
+ * DualGpsPanel — Side-by-side rocket, payload, and drone GPS coordinates.
  *
  * Large readable GPS coordinates for the referee dashboard.
- * No debug info — only lat/lng/alt for both vehicles.
  */
 import React from "react";
 import { useTranslation } from "react-i18next";
@@ -11,11 +10,13 @@ import { PanelContainer, TelemetryValue } from "@shared/ui";
 import { useAppSelector } from "@app/store";
 import { selectRocketGps } from "@entities/rocket-packet";
 import { selectPayloadGps } from "@entities/payload-packet";
+import { selectDroneGps } from "@entities/drone-packet";
 
 export const DualGpsPanel = React.memo(function DualGpsPanel() {
   const { t } = useTranslation();
   const rocketGps = useAppSelector(selectRocketGps);
   const payloadGps = useAppSelector(selectPayloadGps);
+  const droneGps = useAppSelector(selectDroneGps);
 
   const columnStyle: React.CSSProperties = {
     flex: 1,
@@ -48,17 +49,17 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
           </div>
           <TelemetryValue
             label={t("telemetry.latitude")}
-            value={rocketGps ? rocketGps.lat.toFixed(6) : "---"}
+            value={rocketGps && typeof rocketGps.lat === "number" ? rocketGps.lat.toFixed(6) : "---"}
             size="md"
           />
           <TelemetryValue
             label={t("telemetry.longitude")}
-            value={rocketGps ? rocketGps.lng.toFixed(6) : "---"}
+            value={rocketGps && typeof rocketGps.lng === "number" ? rocketGps.lng.toFixed(6) : "---"}
             size="md"
           />
           <TelemetryValue
             label={t("telemetry.altitude")}
-            value={rocketGps ? rocketGps.alt.toFixed(1) : "---"}
+            value={rocketGps && typeof rocketGps.alt === "number" ? rocketGps.alt.toFixed(1) : "---"}
             unit={t("units.meters")}
             size="md"
           />
@@ -80,17 +81,49 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
           </div>
           <TelemetryValue
             label={t("telemetry.latitude")}
-            value={payloadGps ? payloadGps.lat.toFixed(6) : "---"}
+            value={payloadGps && typeof payloadGps.lat === "number" ? payloadGps.lat.toFixed(6) : "---"}
             size="md"
           />
           <TelemetryValue
             label={t("telemetry.longitude")}
-            value={payloadGps ? payloadGps.lng.toFixed(6) : "---"}
+            value={payloadGps && typeof payloadGps.lng === "number" ? payloadGps.lng.toFixed(6) : "---"}
             size="md"
           />
           <TelemetryValue
             label={t("telemetry.altitude")}
-            value={payloadGps ? payloadGps.alt.toFixed(1) : "---"}
+            value={payloadGps && typeof payloadGps.alt === "number" ? payloadGps.alt.toFixed(1) : "---"}
+            unit={t("units.meters")}
+            size="md"
+          />
+        </div>
+
+        {/* Divider */}
+        <div
+          style={{
+            width: 1,
+            backgroundColor: "var(--color-border-default)",
+            alignSelf: "stretch",
+          }}
+        />
+
+        {/* Drone GPS */}
+        <div style={columnStyle}>
+          <div style={{ ...headerStyle, color: "var(--color-status-nominal)" }}>
+            Drone GPS
+          </div>
+          <TelemetryValue
+            label={t("telemetry.latitude")}
+            value={droneGps && typeof droneGps.lat === "number" ? droneGps.lat.toFixed(6) : "---"}
+            size="md"
+          />
+          <TelemetryValue
+            label={t("telemetry.longitude")}
+            value={droneGps && typeof droneGps.lng === "number" ? droneGps.lng.toFixed(6) : "---"}
+            size="md"
+          />
+          <TelemetryValue
+            label={t("telemetry.altitude")}
+            value={droneGps && typeof droneGps.alt === "number" ? droneGps.alt.toFixed(1) : "---"}
             unit={t("units.meters")}
             size="md"
           />

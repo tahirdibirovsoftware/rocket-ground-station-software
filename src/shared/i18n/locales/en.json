@@ -6,6 +6,7 @@
   "nav": {
     "teamDashboard": "Team Dashboard",
     "refereeDashboard": "Referee Dashboard",
+    "flightArtifacts": "Flight Artifacts",
     "settings": "Settings"
   },
   "connection": {
@@ -62,7 +63,12 @@
       "title": "Team Dashboard",
       "rawPacketLog": "Raw Packet Log",
       "systemHealth": "System Health",
-      "diagnostics": "Diagnostics"
+      "diagnostics": "Diagnostics",
+      "payloadCamera": "Payload Camera Feed",
+      "cameraScanning": "Scanning Devices...",
+      "cameraDisconnected": "Camera Disconnected",
+      "cameraHint": "Connect an external USB payload/rocket camera to start the feed.",
+      "cameraRescan": "Rescan camera devices"
     },
     "referee": {
       "title": "Referee Dashboard",

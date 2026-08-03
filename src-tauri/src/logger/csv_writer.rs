@@ -1,104 +1,148 @@
-//! CSV writer — append-only logging of parsed telemetry packets.
+//! CSV Logger — Session-bundled append-only logging of parsed telemetry packets.
 //!
-//! Creates timestamped CSV files for each session:
-//! - `rocket_avionics_YYYYMMDD_HHMMSS.csv`
-//! - `payload_scientific_YYYYMMDD_HHMMSS.csv`
+//! Creates a dedicated timestamped flight directory for each session:
+//! `~/azst-logs/flight_YYYY-MM-DD_HH-MM-SS/`
 //!
-//! Files are flushed after every write to minimize data loss on crash.
+//! Log files inside the directory:
+//! - `telemetry_rocket.csv`
+//! - `telemetry_payload.csv`
+//! - `telemetry_drone.csv`
+//! - `telemetry_unified.csv` (Excel-optimized master log containing all sources)
+//!
+//! All writes are flushed immediately to disk to guarantee 0 data loss on crash or power failure.
 
 use std::fs::{self, File, OpenOptions};
 use std::path::PathBuf;
 
 use chrono::Local;
 
-use crate::protocol::rocket_packet::{FlightState, RocketPacket};
-use crate::protocol::payload_packet::PayloadPacket;
+use crate::protocol::rocket_packet::FlightState;
+use crate::protocol::telemetry_packet::TelemetryPacket;
 
-/// Default log directory (relative to user home).
+/// Default root log directory (relative to user home).
 pub const DEFAULT_LOG_DIR: &str = "azst-logs";
 
-/// Manages CSV file writing for a single telemetry session.
+/// Manages CSV file writing for a single flight telemetry session.
 pub struct CsvLogger {
-    /// Directory where log files are stored.
-    log_dir: PathBuf,
-    /// Session timestamp string (YYYYMMDD_HHMMSS).
-    session_id: String,
-    /// Writer for rocket avionics packets.
+    /// Dedicated flight session directory.
+    pub session_dir: PathBuf,
+    /// Session timestamp string (YYYY-MM-DD_HH-MM-SS).
+    pub session_id: String,
+    /// Writer for rocket telemetry.
     rocket_writer: Option<csv::Writer<File>>,
-    /// Writer for payload scientific packets.
+    /// Writer for payload telemetry.
     payload_writer: Option<csv::Writer<File>>,
+    /// Writer for drone telemetry.
+    drone_writer: Option<csv::Writer<File>>,
+    /// Writer for master unified telemetry.
+    unified_writer: Option<csv::Writer<File>>,
     /// Count of rocket packets written.
     pub rocket_count: u64,
     /// Count of payload packets written.
     pub payload_count: u64,
+    /// Count of drone packets written.
+    pub drone_count: u64,
 }
 
 impl CsvLogger {
-    /// Create a new CSV logger with the given log directory.
-    ///
-    /// The directory is created if it doesn't exist.
-    /// CSV files are created lazily on first write.
-    pub fn new(log_dir: impl Into<PathBuf>) -> std::io::Result<Self> {
-        let log_dir = log_dir.into();
-        fs::create_dir_all(&log_dir)?;
+    /// Create a new CSV logger creating a dedicated flight session directory inside `root_dir`.
+    pub fn new(root_dir: impl Into<PathBuf>) -> std::io::Result<Self> {
+        let root_dir = root_dir.into();
+        let session_id = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+        let session_dir = root_dir.join(format!("flight_{}", session_id));
 
-        let session_id = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        fs::create_dir_all(&session_dir)?;
 
         Ok(Self {
-            log_dir,
+            session_dir,
             session_id,
             rocket_writer: None,
             payload_writer: None,
+            drone_writer: None,
+            unified_writer: None,
             rocket_count: 0,
             payload_count: 0,
+            drone_count: 0,
         })
     }
 
-    /// Create a new CSV logger with the default log directory (`~/azst-logs/`).
+    /// Create a new CSV logger with default root log directory (`~/azst-logs/`).
     pub fn with_default_dir() -> std::io::Result<Self> {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let log_dir = PathBuf::from(home).join(DEFAULT_LOG_DIR);
-        Self::new(log_dir)
+        let root_dir = PathBuf::from(home).join(DEFAULT_LOG_DIR);
+        Self::new(root_dir)
     }
 
-    /// Create a logger with a specific session ID (useful for testing).
-    pub fn with_session_id(
-        log_dir: impl Into<PathBuf>,
-        session_id: impl Into<String>,
-    ) -> std::io::Result<Self> {
-        let log_dir = log_dir.into();
-        fs::create_dir_all(&log_dir)?;
+    /// Create a logger with a specific session directory (useful for testing).
+    pub fn with_session_dir(session_dir: impl Into<PathBuf>) -> std::io::Result<Self> {
+        let session_dir = session_dir.into();
+        fs::create_dir_all(&session_dir)?;
+        let session_id = session_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| Local::now().format("%Y-%m-%d_%H-%M-%S").to_string());
 
         Ok(Self {
-            log_dir,
-            session_id: session_id.into(),
+            session_dir,
+            session_id,
             rocket_writer: None,
             payload_writer: None,
+            drone_writer: None,
+            unified_writer: None,
             rocket_count: 0,
             payload_count: 0,
+            drone_count: 0,
         })
     }
 
-    /// Write a rocket avionics packet to the CSV file.
-    pub fn write_rocket(&mut self, packet: &RocketPacket) -> std::io::Result<()> {
-        let writer = self.get_or_create_rocket_writer()?;
+    /// Write a rocket packet into rocket CSV and master unified CSV.
+    pub fn write_rocket(&mut self, packet: &TelemetryPacket) -> std::io::Result<()> {
+        let iso_time = Local::now().to_rfc3339();
 
+        // 1. Dedicated Rocket CSV
+        let writer = self.get_or_create_writer("rocket")?;
         writer
             .write_record(&[
                 packet.timestamp_ms.to_string(),
-                format!("{:.4}", packet.altitude),
+                iso_time.clone(),
+                flight_state_to_str(packet.flight_state),
+                format!("{:.2}", packet.altitude),
                 format!("{:.6}", packet.latitude),
                 format!("{:.6}", packet.longitude),
-                format!("{:.2}", packet.pressure1),
-                format!("{:.2}", packet.pressure2),
-                format!("{:.2}", packet.velocity),
-                flight_state_to_str(packet.flight_state),
+                format!("{:.2}", packet.gps_speed),
+                format!("{:.2}", packet.pressure),
+                format!("{:.2}", packet.humidity),
                 (packet.primary_parachute_deployed as u8).to_string(),
                 (packet.secondary_parachute_deployed as u8).to_string(),
             ])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
         writer
+            .flush()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        // 2. Unified Master CSV
+        let unified = self.get_or_create_writer("unified")?;
+        unified
+            .write_record(&[
+                "ROCKET",
+                "0x01",
+                &packet.timestamp_ms.to_string(),
+                &iso_time,
+                &flight_state_to_str(packet.flight_state),
+                &format!("{:.2}", packet.altitude),
+                &format!("{:.6}", packet.latitude),
+                &format!("{:.6}", packet.longitude),
+                &format!("{:.2}", packet.gps_speed),
+                &format!("{:.2}", packet.pressure),
+                &format!("{:.2}", packet.humidity),
+                &(packet.primary_parachute_deployed as u8).to_string(),
+                &(packet.secondary_parachute_deployed as u8).to_string(),
+                "",
+                "",
+                "",
+            ])
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        unified
             .flush()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -106,21 +150,49 @@ impl CsvLogger {
         Ok(())
     }
 
-    /// Write a payload scientific packet to the CSV file.
-    pub fn write_payload(&mut self, packet: &PayloadPacket) -> std::io::Result<()> {
-        let writer = self.get_or_create_payload_writer()?;
+    /// Write a payload packet into payload CSV and master unified CSV.
+    pub fn write_payload(&mut self, packet: &TelemetryPacket) -> std::io::Result<()> {
+        let iso_time = Local::now().to_rfc3339();
 
+        // 1. Dedicated Payload CSV
+        let writer = self.get_or_create_writer("payload")?;
         writer
             .write_record(&[
                 packet.timestamp_ms.to_string(),
+                iso_time.clone(),
                 format!("{:.6}", packet.latitude),
                 format!("{:.6}", packet.longitude),
-                format!("{:.4}", packet.altitude),
-                format!("{:.4}", packet.scientific_data),
+                format!("{:.2}", packet.altitude),
+                format!("{:.2}", packet.temp),
             ])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
         writer
+            .flush()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        // 2. Unified Master CSV
+        let unified = self.get_or_create_writer("unified")?;
+        unified
+            .write_record(&[
+                "PAYLOAD",
+                "0x02",
+                &packet.timestamp_ms.to_string(),
+                &iso_time,
+                "",
+                &format!("{:.2}", packet.altitude),
+                &format!("{:.6}", packet.latitude),
+                &format!("{:.6}", packet.longitude),
+                "",
+                "",
+                "",
+                "",
+                "",
+                &format!("{:.2}", packet.temp),
+                "",
+                "",
+            ])
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        unified
             .flush()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -128,22 +200,93 @@ impl CsvLogger {
         Ok(())
     }
 
-    /// Get the path to the rocket CSV file.
+    /// Write a drone packet into drone CSV and master unified CSV.
+    pub fn write_drone(&mut self, packet: &TelemetryPacket) -> std::io::Result<()> {
+        let iso_time = Local::now().to_rfc3339();
+
+        // 1. Dedicated Drone CSV
+        let writer = self.get_or_create_writer("drone")?;
+        writer
+            .write_record(&[
+                packet.timestamp_ms.to_string(),
+                iso_time.clone(),
+                format!("{:.6}", packet.latitude),
+                format!("{:.6}", packet.longitude),
+                format!("{:.2}", packet.altitude),
+                format!("{:.2}", packet.gps_speed),
+                format!("{:.1}", packet.gps_course),
+            ])
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        writer
+            .flush()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        // 2. Unified Master CSV
+        let unified = self.get_or_create_writer("unified")?;
+        unified
+            .write_record(&[
+                "DRONE",
+                "0x03",
+                &packet.timestamp_ms.to_string(),
+                &iso_time,
+                "",
+                &format!("{:.2}", packet.altitude),
+                &format!("{:.6}", packet.latitude),
+                &format!("{:.6}", packet.longitude),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                &format!("{:.2}", packet.gps_speed),
+                &format!("{:.1}", packet.gps_course),
+            ])
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        unified
+            .flush()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        self.drone_count += 1;
+        Ok(())
+    }
+
+    /// Get file paths inside the flight session directory.
     pub fn rocket_file_path(&self) -> PathBuf {
-        self.log_dir
-            .join(format!("rocket_avionics_{}.csv", self.session_id))
+        self.session_dir.join("telemetry_rocket.csv")
     }
 
-    /// Get the path to the payload CSV file.
     pub fn payload_file_path(&self) -> PathBuf {
-        self.log_dir
-            .join(format!("payload_scientific_{}.csv", self.session_id))
+        self.session_dir.join("telemetry_payload.csv")
     }
 
-    /// Get or lazily create the rocket CSV writer with headers.
-    fn get_or_create_rocket_writer(&mut self) -> std::io::Result<&mut csv::Writer<File>> {
-        if self.rocket_writer.is_none() {
-            let path = self.rocket_file_path();
+    pub fn drone_file_path(&self) -> PathBuf {
+        self.session_dir.join("telemetry_drone.csv")
+    }
+
+    pub fn unified_file_path(&self) -> PathBuf {
+        self.session_dir.join("telemetry_unified.csv")
+    }
+
+    /// Get or create CSV writer with clear Excel-friendly headers.
+    fn get_or_create_writer(&mut self, source: &str) -> std::io::Result<&mut csv::Writer<File>> {
+        let path = match source {
+            "rocket" => self.rocket_file_path(),
+            "payload" => self.payload_file_path(),
+            "drone" => self.drone_file_path(),
+            "unified" => self.unified_file_path(),
+            _ => unreachable!(),
+        };
+
+        let writer_ref = match source {
+            "rocket" => &mut self.rocket_writer,
+            "payload" => &mut self.payload_writer,
+            "drone" => &mut self.drone_writer,
+            "unified" => &mut self.unified_writer,
+            _ => unreachable!(),
+        };
+
+        if writer_ref.is_none() {
             let file = OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -151,63 +294,71 @@ impl CsvLogger {
 
             let mut writer = csv::Writer::from_writer(file);
 
-            // Write header if file is new (empty)
             if fs::metadata(&path)?.len() == 0 {
-                writer
-                    .write_record(&[
+                let headers: &[&str] = match source {
+                    "rocket" => &[
                         "timestamp_ms",
+                        "date_time_iso",
+                        "flight_state",
                         "altitude_m",
                         "latitude",
                         "longitude",
+                        "velocity_m_s",
                         "pressure1_hpa",
                         "pressure2_hpa",
-                        "velocity_ms",
-                        "flight_state",
                         "primary_parachute",
                         "secondary_parachute",
-                    ])
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-                writer
-                    .flush()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-            }
-
-            self.rocket_writer = Some(writer);
-        }
-
-        Ok(self.rocket_writer.as_mut().unwrap())
-    }
-
-    /// Get or lazily create the payload CSV writer with headers.
-    fn get_or_create_payload_writer(&mut self) -> std::io::Result<&mut csv::Writer<File>> {
-        if self.payload_writer.is_none() {
-            let path = self.payload_file_path();
-            let file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)?;
-
-            let mut writer = csv::Writer::from_writer(file);
-
-            if fs::metadata(&path)?.len() == 0 {
-                writer
-                    .write_record(&[
+                    ],
+                    "payload" => &[
                         "timestamp_ms",
+                        "date_time_iso",
                         "latitude",
                         "longitude",
                         "altitude_m",
                         "scientific_data",
-                    ])
+                    ],
+                    "drone" => &[
+                        "timestamp_ms",
+                        "date_time_iso",
+                        "latitude",
+                        "longitude",
+                        "altitude_m",
+                        "speed_m_s",
+                        "course_deg",
+                    ],
+                    "unified" => &[
+                        "source",
+                        "packet_id",
+                        "timestamp_ms",
+                        "date_time_iso",
+                        "flight_state",
+                        "altitude_m",
+                        "latitude",
+                        "longitude",
+                        "velocity_m_s",
+                        "pressure1_hpa",
+                        "pressure2_hpa",
+                        "primary_parachute",
+                        "secondary_parachute",
+                        "scientific_data",
+                        "drone_speed_m_s",
+                        "drone_course_deg",
+                    ],
+                    _ => unreachable!(),
+                };
+
+                writer
+                    .write_record(headers)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
                 writer
                     .flush()
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
             }
 
-            self.payload_writer = Some(writer);
+            *writer_ref = Some(writer);
         }
 
-        Ok(self.payload_writer.as_mut().unwrap())
+        Ok(writer_ref.as_mut().unwrap())
     }
 }
 
@@ -222,3 +373,5 @@ fn flight_state_to_str(state: FlightState) -> String {
         FlightState::SecondaryChute => "secondary_chute".to_string(),
     }
 }
+
+

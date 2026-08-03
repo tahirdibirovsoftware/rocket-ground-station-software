@@ -1,7 +1,4 @@
 //! Shared application state managed by Tauri.
-//!
-//! This state is injected into the Tauri app builder and accessible
-//! in all command handlers via `tauri::State<AppState>`.
 
 use std::sync::{Arc, Mutex};
 
@@ -27,10 +24,10 @@ pub enum ConnectionMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionStatus {
     pub mode: ConnectionMode,
-    pub rocket_port: Option<String>,
-    pub payload_port: Option<String>,
+    pub rfd_port: Option<String>,
     pub rocket_packets_received: u64,
     pub payload_packets_received: u64,
+    pub drone_packets_received: u64,
     pub checksum_failures: u64,
     pub uptime_ms: u64,
 }
@@ -39,10 +36,10 @@ impl Default for ConnectionStatus {
     fn default() -> Self {
         Self {
             mode: ConnectionMode::Disconnected,
-            rocket_port: None,
-            payload_port: None,
+            rfd_port: None,
             rocket_packets_received: 0,
             payload_packets_received: 0,
+            drone_packets_received: 0,
             checksum_failures: 0,
             uptime_ms: 0,
         }
@@ -50,8 +47,6 @@ impl Default for ConnectionStatus {
 }
 
 /// Application state shared across all IPC handlers.
-///
-/// Uses `Arc<Mutex<T>>` for interior mutability behind Tauri's state system.
 pub struct AppState {
     /// Mock generator controls.
     pub mock_state: Arc<MockState>,
@@ -61,12 +56,12 @@ pub struct AppState {
     pub csv_logger: Mutex<Option<CsvLogger>>,
     /// Current connection status.
     pub connection_status: Mutex<ConnectionStatus>,
-    /// Handle to cancel the Rocket serial read loop.
-    pub rocket_cancel: Arc<std::sync::atomic::AtomicBool>,
-    /// Handle to cancel the Payload serial read loop.
-    pub payload_cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Handle to cancel the RFD serial read loop.
+    pub rfd_cancel: Arc<std::sync::atomic::AtomicBool>,
     /// Handle to cancel the Mock data loop.
     pub mock_cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Native camera streaming state.
+    pub camera_state: crate::camera::CameraState,
 }
 
 impl AppState {
@@ -76,9 +71,9 @@ impl AppState {
             frame_parser: Mutex::new(FrameParser::new()),
             csv_logger: Mutex::new(None),
             connection_status: Mutex::new(ConnectionStatus::default()),
-            rocket_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            payload_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            rfd_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             mock_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            camera_state: crate::camera::CameraState::new(),
         }
     }
 
@@ -88,6 +83,7 @@ impl AppState {
         let mut status = self.connection_status.lock().unwrap();
         status.rocket_packets_received = parser.stats.rocket_packets;
         status.payload_packets_received = parser.stats.payload_packets;
+        status.drone_packets_received = parser.stats.drone_packets;
         status.checksum_failures = parser.stats.checksum_failures;
     }
 }
