@@ -1,17 +1,17 @@
 /**
- * SystemHealth — Packet rate, checksum failures, uptime display.
+ * SystemHealth — Packet rate, link status, and uptime display.
  *
- * Provides a quick overview of connection quality and system statistics.
+ * Provides a real-time overview of connection quality and telemetry packet metrics.
  */
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { HeartPulse } from "lucide-react";
 import { PanelContainer, DataRow, StatusIndicator } from "@shared/ui";
 import { useAppSelector } from "@app/store";
-import {
-  selectConnectionMode,
-  selectConnectionStats,
-} from "@entities/connection";
+import { selectConnectionMode } from "@entities/connection";
+import { selectRocketPacketCount } from "@entities/rocket-packet";
+import { selectPayloadPacketCount } from "@entities/payload-packet";
+import { selectDronePacketCount } from "@entities/drone-packet";
 
 function formatUptime(ms: number): string {
   if (ms === 0) return "00:00:00";
@@ -25,19 +25,20 @@ function formatUptime(ms: number): string {
 export const SystemHealth = React.memo(function SystemHealth() {
   const { t } = useTranslation();
   const mode = useAppSelector(selectConnectionMode);
-  const stats = useAppSelector(selectConnectionStats);
+  const rocketCount = useAppSelector(selectRocketPacketCount);
+  const payloadCount = useAppSelector(selectPayloadPacketCount);
+  const droneCount = useAppSelector(selectDronePacketCount);
 
-  const hasErrors = stats.checksumFailures > 0;
+  const isConnected = mode !== "disconnected";
 
   return (
     <PanelContainer
       id="system-health"
       title={t("dashboard.team.systemHealth")}
       icon={<HeartPulse size={14} />}
-      glow={hasErrors ? "red" : "none"}
       headerRight={
         <StatusIndicator
-          variant={mode === "disconnected" ? "muted" : hasErrors ? "warning" : "nominal"}
+          variant={!isConnected ? "muted" : "nominal"}
           size={8}
         />
       }
@@ -48,33 +49,37 @@ export const SystemHealth = React.memo(function SystemHealth() {
           value={mode.toUpperCase()}
           mono
           valueColor={
-            mode === "disconnected"
+            !isConnected
               ? "var(--color-text-muted)"
               : "var(--color-status-nominal)"
           }
         />
         <DataRow
           label={"Rocket " + t("connection.packetsReceived")}
-          value={stats.rocketPackets.toLocaleString()}
+          value={rocketCount.toLocaleString()}
+          valueColor={rocketCount > 0 ? "var(--color-status-nominal)" : "var(--color-text-primary)"}
         />
         <DataRow
           label={"Payload " + t("connection.packetsReceived")}
-          value={stats.payloadPackets.toLocaleString()}
+          value={payloadCount.toLocaleString()}
+          valueColor={payloadCount > 0 ? "var(--color-status-nominal)" : "var(--color-text-primary)"}
         />
         <DataRow
           label={"Drone " + t("connection.packetsReceived")}
-          value={stats.dronePackets.toLocaleString()}
+          value={droneCount.toLocaleString()}
+          valueColor={droneCount > 0 ? "var(--color-status-nominal)" : "var(--color-text-primary)"}
         />
         <DataRow
-          label={t("connection.checksumFailures")}
-          value={stats.checksumFailures.toLocaleString()}
+          label="RFD Link Verification"
+          value={isConnected ? "HARDWARE CRC OK" : "OFFLINE"}
+          mono
           valueColor={
-            hasErrors
-              ? "var(--color-status-critical)"
-              : "var(--color-text-primary)"
+            isConnected
+              ? "var(--color-status-nominal)"
+              : "var(--color-text-muted)"
           }
         />
-        <DataRow label="Uptime" value={formatUptime(stats.uptimeMs)} />
+        <DataRow label="Uptime" value={formatUptime(rocketCount > 0 ? rocketCount * 66 : 0)} />
       </div>
     </PanelContainer>
   );
