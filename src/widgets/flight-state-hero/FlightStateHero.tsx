@@ -1,24 +1,48 @@
 /**
- * FlightStateHero — Large flight phase display for the referee dashboard.
+ * FlightStateHero — Premium aerospace flight phase & altitude display for Referees.
  *
- * Designed to be readable from 3+ meters. Shows the current flight state
- * with a massive color-coded label and parachute deployment flash.
+ * Designed to be read from 3+ meters. Displays current flight phase with color-coded halo,
+ * apogee progress bar, ascent/descent rate, and dual parachute deployment status.
  */
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Rocket } from "lucide-react";
+import { Rocket, ShieldCheck, ArrowUpRight, ArrowDownRight, Gauge, CheckCircle2 } from "lucide-react";
 import { PanelContainer, TelemetryValue } from "@shared/ui";
 import { useAppSelector } from "@app/store";
-import { selectLatestRocketPacket } from "@entities/rocket-packet";
+import { selectLatestRocketPacket, selectMaxAltitude } from "@entities/rocket-packet";
 import { FlightState } from "@shared/types";
 
-const STATE_COLORS: Record<FlightState, string> = {
-  [FlightState.Pad]: "var(--color-status-muted)",
-  [FlightState.Powered]: "var(--color-status-warning)",
-  [FlightState.Unpowered]: "var(--color-status-info)",
-  [FlightState.Apogee]: "var(--color-status-nominal)",
-  [FlightState.PrimaryChute]: "var(--color-status-nominal)",
-  [FlightState.SecondaryChute]: "var(--color-status-critical)",
+const STATE_COLORS: Record<FlightState, { color: string; bg: string; border: string }> = {
+  [FlightState.Pad]: {
+    color: "var(--color-status-muted)",
+    bg: "rgba(148, 163, 184, 0.1)",
+    border: "rgba(148, 163, 184, 0.3)",
+  },
+  [FlightState.Powered]: {
+    color: "var(--color-status-warning)",
+    bg: "rgba(255, 170, 0, 0.15)",
+    border: "rgba(255, 170, 0, 0.4)",
+  },
+  [FlightState.Unpowered]: {
+    color: "var(--color-status-info)",
+    bg: "rgba(0, 200, 255, 0.15)",
+    border: "rgba(0, 200, 255, 0.4)",
+  },
+  [FlightState.Apogee]: {
+    color: "var(--color-status-nominal)",
+    bg: "rgba(0, 255, 136, 0.15)",
+    border: "rgba(0, 255, 136, 0.4)",
+  },
+  [FlightState.PrimaryChute]: {
+    color: "var(--color-status-nominal)",
+    bg: "rgba(0, 255, 136, 0.15)",
+    border: "rgba(0, 255, 136, 0.4)",
+  },
+  [FlightState.SecondaryChute]: {
+    color: "#ff0055",
+    bg: "rgba(255, 0, 85, 0.15)",
+    border: "rgba(255, 0, 85, 0.4)",
+  },
 };
 
 const I18N_KEYS: Record<FlightState, string> = {
@@ -30,98 +54,305 @@ const I18N_KEYS: Record<FlightState, string> = {
   [FlightState.SecondaryChute]: "flightState.secondaryChute",
 };
 
+const FLIGHT_PHASES = [
+  FlightState.Pad,
+  FlightState.Powered,
+  FlightState.Unpowered,
+  FlightState.Apogee,
+  FlightState.PrimaryChute,
+  FlightState.SecondaryChute,
+];
+
 export const FlightStateHero = React.memo(function FlightStateHero() {
   const { t } = useTranslation();
   const latest = useAppSelector(selectLatestRocketPacket);
+  const maxAltitude = useAppSelector(selectMaxAltitude);
+
   const state = latest?.flightState ?? FlightState.Pad;
-  const color = STATE_COLORS[state];
+  const stateTheme = STATE_COLORS[state];
 
-  const isDeployed =
-    latest?.primaryParachuteDeployed || latest?.secondaryParachuteDeployed;
+  const currentAlt = latest && typeof latest.altitude === "number" ? latest.altitude : 0;
+  const currentSpeed = latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed : 0;
 
-  const glow = isDeployed ? "green" : "none";
+  // Determine if rocket is ascending or descending
+  const isDescending = state === FlightState.PrimaryChute || state === FlightState.SecondaryChute;
+
+  // Progress to apogee target (3000m competition baseline)
+  const apogeeProgress = Math.min(100, Math.max(0, (currentAlt / 3000) * 100));
 
   return (
     <PanelContainer
       id="flight-state-hero"
-      title="Flight State"
-      icon={<Rocket size={14} />}
-      glow={glow}
+      title={t("dashboard.referee.title", "Flight State & Avionics")}
+      icon={<Rocket size={16} />}
+      glow={latest?.primaryParachuteDeployed || latest?.secondaryParachuteDeployed ? "green" : "none"}
+      headerRight={
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <ShieldCheck size={14} style={{ color: "var(--color-status-nominal)" }} />
+          <span style={{ fontSize: "0.6875rem", color: "var(--color-text-secondary)", fontWeight: 600 }}>
+            TEKNOFEST A4
+          </span>
+        </div>
+      }
     >
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "1.5rem",
-          padding: "1rem 0",
-          minHeight: 160,
+          gap: "0.875rem",
+          height: "100%",
+          justifyContent: "space-between",
         }}
       >
-        {/* Massive flight state label */}
+        {/* Flight State Phase Timeline Stepper */}
         <div
           style={{
-            fontSize: "2.5rem",
-            fontWeight: 800,
-            fontFamily: "var(--font-mono)",
-            color,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            textAlign: "center",
-            lineHeight: 1.1,
-            textShadow: `0 0 24px ${color}`,
-            transition: "all 300ms ease",
+            display: "grid",
+            gridTemplateColumns: "repeat(6, 1fr)",
+            gap: "0.25rem",
+            backgroundColor: "var(--color-bg-tertiary)",
+            padding: "0.375rem",
+            borderRadius: "0.375rem",
+            border: "1px solid var(--color-border-default)",
           }}
         >
-          {t(I18N_KEYS[state])}
+          {FLIGHT_PHASES.map((phase) => {
+            const isActive = phase === state;
+            const phaseTheme = STATE_COLORS[phase];
+            return (
+              <div
+                key={phase}
+                style={{
+                  textAlign: "center",
+                  padding: "0.25rem 0.125rem",
+                  fontSize: "0.625rem",
+                  fontWeight: isActive ? 700 : 500,
+                  fontFamily: "var(--font-mono)",
+                  color: isActive ? phaseTheme.color : "var(--color-text-muted)",
+                  backgroundColor: isActive ? phaseTheme.bg : "transparent",
+                  border: isActive ? `1px solid ${phaseTheme.border}` : "1px solid transparent",
+                  borderRadius: "0.25rem",
+                  transition: "all 200ms ease",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {t(I18N_KEYS[phase])}
+              </div>
+            );
+          })}
         </div>
 
-        {/* Key metrics row */}
+        {/* Hero Flight Phase Badge */}
         <div
           style={{
+            backgroundColor: stateTheme.bg,
+            border: `1.5px solid ${stateTheme.border}`,
+            borderRadius: "0.5rem",
+            padding: "1rem",
             display: "flex",
-            gap: "2rem",
+            flexDirection: "column",
+            alignItems: "center",
             justifyContent: "center",
+            boxShadow: `0 0 30px ${stateTheme.bg}`,
+            transition: "all 300ms ease",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
-          <TelemetryValue
-            label={t("telemetry.altitude")}
-            value={latest && typeof latest.altitude === "number" ? latest.altitude.toFixed(0) : "---"}
-            unit={t("units.meters")}
-            size="xl"
-          />
-          <TelemetryValue
-            label={t("telemetry.velocity")}
-            value={latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed.toFixed(1) : "---"}
-            unit={t("units.metersPerSecond")}
-            size="xl"
-          />
-        </div>
-
-        {/* Parachute deployment status */}
-        {isDeployed && (
           <div
-            className="animate-pulse-nominal"
             style={{
-              fontSize: "1rem",
+              fontSize: "0.6875rem",
               fontWeight: 700,
-              fontFamily: "var(--font-mono)",
-              color: "var(--color-status-nominal)",
               textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              padding: "0.5rem 1.5rem",
-              border: "2px solid var(--color-status-nominal)",
-              borderRadius: "0.5rem",
-              backgroundColor: "rgba(0, 255, 136, 0.1)",
+              letterSpacing: "0.12em",
+              color: "var(--color-text-muted)",
+              marginBottom: "0.25rem",
             }}
           >
-            {latest?.primaryParachuteDeployed
-              ? t("telemetry.primaryParachute")
-              : t("telemetry.secondaryParachute")}{" "}
-            {t("telemetry.deployed")}
+            ACTIVE FLIGHT PHASE
           </div>
-        )}
+
+          <div
+            style={{
+              fontSize: "2.25rem",
+              fontWeight: 900,
+              fontFamily: "var(--font-mono)",
+              color: stateTheme.color,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              textAlign: "center",
+              lineHeight: 1.1,
+              textShadow: `0 0 20px ${stateTheme.color}`,
+            }}
+          >
+            {t(I18N_KEYS[state])}
+          </div>
+
+          {/* Target Apogee Progress Bar */}
+          <div style={{ width: "100%", maxWidth: 320, marginTop: "0.75rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.625rem", color: "var(--color-text-muted)", marginBottom: 2 }}>
+              <span>Apogee Target</span>
+              <span>{apogeeProgress.toFixed(0)}% (3000m)</span>
+            </div>
+            <div style={{ width: "100%", height: 4, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2, overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${apogeeProgress}%`,
+                  height: "100%",
+                  backgroundColor: stateTheme.color,
+                  boxShadow: `0 0 8px ${stateTheme.color}`,
+                  transition: "width 300ms ease-out",
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Telemetry Metrics Grid */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "0.625rem",
+          }}
+        >
+          {/* Altitude Box */}
+          <div
+            style={{
+              backgroundColor: "var(--color-bg-tertiary)",
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "0.375rem",
+              padding: "0.625rem 0.875rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.25rem",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", fontWeight: 600 }}>
+                {t("telemetry.altitude")}
+              </span>
+              <span style={{ fontSize: "0.625rem", color: "var(--color-status-nominal)", fontWeight: 700, fontFamily: "var(--font-mono)" }}>
+                MAX {maxAltitude.toFixed(0)}m
+              </span>
+            </div>
+            <TelemetryValue
+              label={t("telemetry.altitude")}
+              value={latest && typeof latest.altitude === "number" ? latest.altitude.toFixed(0) : "---"}
+              unit={t("units.meters")}
+              size="lg"
+            />
+          </div>
+
+          {/* Speed / Velocity Box */}
+          <div
+            style={{
+              backgroundColor: "var(--color-bg-tertiary)",
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "0.375rem",
+              padding: "0.625rem 0.875rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.25rem",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", fontWeight: 600 }}>
+                {t("telemetry.velocity")}
+              </span>
+              <span style={{ fontSize: "0.625rem", color: isDescending ? "var(--color-status-warning)" : "var(--color-status-info)", display: "flex", alignItems: "center", gap: 2, fontWeight: 700 }}>
+                {isDescending ? <ArrowDownRight size={12} /> : <ArrowUpRight size={12} />}
+                {isDescending ? "DESCENT" : "ASCENT"}
+              </span>
+            </div>
+            <TelemetryValue
+              label={t("telemetry.velocity")}
+              value={currentSpeed.toFixed(1)}
+              unit={t("units.metersPerSecond")}
+              size="lg"
+              color={isDescending ? "var(--color-status-warning)" : "var(--color-status-info)"}
+            />
+          </div>
+        </div>
+
+        {/* Parachute Status Indicator Row */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "0.5rem",
+          }}
+        >
+          {/* Primary Parachute Card */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.4rem 0.625rem",
+              borderRadius: "0.25rem",
+              backgroundColor: latest?.primaryParachuteDeployed ? "rgba(0, 255, 136, 0.15)" : "var(--color-bg-tertiary)",
+              border: `1px solid ${latest?.primaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-border-default)"}`,
+              transition: "all 200ms ease",
+            }}
+          >
+            <CheckCircle2
+              size={14}
+              style={{
+                color: latest?.primaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-text-muted)",
+              }}
+            />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: "0.625rem", color: "var(--color-text-muted)" }}>Primary Chute</span>
+              <span
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  fontFamily: "var(--font-mono)",
+                  color: latest?.primaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-text-secondary)",
+                }}
+              >
+                {latest?.primaryParachuteDeployed ? "DEPLOYED" : "ARMED"}
+              </span>
+            </div>
+          </div>
+
+          {/* Secondary Parachute Card */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              padding: "0.4rem 0.625rem",
+              borderRadius: "0.25rem",
+              backgroundColor: latest?.secondaryParachuteDeployed ? "rgba(0, 255, 136, 0.15)" : "var(--color-bg-tertiary)",
+              border: `1px solid ${latest?.secondaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-border-default)"}`,
+              transition: "all 200ms ease",
+            }}
+          >
+            <Gauge
+              size={14}
+              style={{
+                color: latest?.secondaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-text-muted)",
+              }}
+            />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: "0.625rem", color: "var(--color-text-muted)" }}>Secondary Chute</span>
+              <span
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  fontFamily: "var(--font-mono)",
+                  color: latest?.secondaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-text-secondary)",
+                }}
+              >
+                {latest?.secondaryParachuteDeployed ? "DEPLOYED" : "ARMED"}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </PanelContainer>
   );

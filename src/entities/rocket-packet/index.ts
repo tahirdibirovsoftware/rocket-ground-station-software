@@ -12,4 +12,5 @@ export {
   selectRocketVelocityHistory,
   selectRocketPressureHistory,
   selectRocketGps,
+  selectMaxAltitude,
 } from "./model/selectors";

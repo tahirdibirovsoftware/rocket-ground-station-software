@@ -53,3 +53,12 @@ export const selectRocketGps = createSelector(
   (pkt) =>
     pkt ? { lat: pkt.latitude, lng: pkt.longitude, alt: pkt.altitude } : null,
 );
+
+/** Select the maximum altitude reached so far. */
+export const selectMaxAltitude = createSelector(
+  selectRocketHistory,
+  (history) => {
+    if (history.length === 0) return 0;
+    return Math.max(...history.map((p) => p.altitude));
+  },
+);
