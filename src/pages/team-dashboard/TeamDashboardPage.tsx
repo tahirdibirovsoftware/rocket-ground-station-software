@@ -109,11 +109,11 @@ export function TeamDashboardPage() {
         </div>
 
         {/* Column 3: Connection + Health + Drone + Camera */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", flex: 1, minHeight: 0 }}>
           <ConnectionPanel />
           <SystemHealth />
           <DroneSummary />
-          <CameraPanel />
+          <CameraPanel style={{ flex: 1, minHeight: 260 }} />
         </div>
       </div>
     </div>

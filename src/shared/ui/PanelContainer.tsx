@@ -14,6 +14,8 @@ interface PanelContainerProps {
   glow?: "green" | "red" | "none";
   /** Extra CSS class. */
   className?: string;
+  /** Custom inline style. */
+  style?: React.CSSProperties;
   /** Panel content. */
   children: React.ReactNode;
   /** Optional right-side header content (controls, badges, etc.). */
@@ -27,6 +29,7 @@ export const PanelContainer = React.memo(function PanelContainer({
   icon,
   glow = "none",
   className = "",
+  style,
   children,
   headerRight,
   id,
@@ -50,6 +53,7 @@ export const PanelContainer = React.memo(function PanelContainer({
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
+        ...style,
       }}
     >
       {title && (

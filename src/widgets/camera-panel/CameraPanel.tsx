@@ -2,12 +2,13 @@
  * CameraPanel — Live Native USB Camera video feed widget.
  *
  * Captures USB webcam frames directly from V4L2/FFmpeg via Rust Tauri IPC.
- * Strictly ignores internal/built-in cameras for auto-connection & recovery.
+ * Features auto-stretching high-definition viewport, full-screen expansion,
+ * and high-contrast aerospace standby HUD when disconnected.
  */
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Camera, CameraOff, RefreshCw, Settings } from "lucide-react";
+import { Camera, CameraOff, RefreshCw, Settings, Maximize2, Minimize2, Radio, Video } from "lucide-react";
 import { IPC_COMMANDS } from "@shared/config/constants";
 import { useTauriEvent } from "@shared/hooks";
 import { PanelContainer } from "@shared/ui";
@@ -18,7 +19,11 @@ export interface CameraDeviceInfo {
   is_usb: boolean;
 }
 
-export const CameraPanel = React.memo(function CameraPanel() {
+export interface CameraPanelProps {
+  style?: React.CSSProperties;
+}
+
+export const CameraPanel = React.memo(function CameraPanel({ style }: CameraPanelProps) {
   const { t } = useTranslation();
   const lastFrameTimeRef = useRef<number>(0);
 
@@ -29,6 +34,7 @@ export const CameraPanel = React.memo(function CameraPanel() {
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [showSelector, setShowSelector] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Listen to native JPEG frame events from Tauri backend
   useTauriEvent<string>("camera_frame", useCallback((dataUrl: string) => {
@@ -82,10 +88,8 @@ export const CameraPanel = React.memo(function CameraPanel() {
       const usbDev = cameras.find((c) => c.is_usb);
 
       if (usbDev) {
-        // USB camera found -> connect to it
         await connectToDevice(String(usbDev.id));
       } else {
-        // NO USB camera connected -> stop any active stream & display waiting status
         await invoke(IPC_COMMANDS.STOP_CAMERA).catch(() => {});
         setFrameSrc(null);
         setSelectedDeviceId("");
@@ -105,13 +109,11 @@ export const CameraPanel = React.memo(function CameraPanel() {
     const watchdog = setInterval(() => {
       const now = Date.now();
 
-      // If streaming, but no frame arrived for > 2.5s, stream died (e.g. unplugged)
       if (frameSrc && now - lastFrameTimeRef.current > 2500) {
         setFrameSrc(null);
         setError("USB Camera disconnected. Reconnect camera to resume.");
         scanDevices();
       } else if (!frameSrc && !isScanning) {
-        // Periodically poll to auto-detect USB camera re-plug
         scanDevices();
       }
     }, 2000);
@@ -124,7 +126,6 @@ export const CameraPanel = React.memo(function CameraPanel() {
     scanDevices();
 
     return () => {
-      // Stop camera stream on unmount
       invoke(IPC_COMMANDS.STOP_CAMERA).catch(() => {});
     };
   }, []);
@@ -134,8 +135,45 @@ export const CameraPanel = React.memo(function CameraPanel() {
       id="camera-panel"
       title={t("dashboard.team.payloadCamera", "Payload Camera Feed")}
       icon={<Camera size={14} />}
+      style={style}
       headerRight={
         <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+          {frameSrc && (
+            <span
+              style={{
+                fontSize: "0.625rem",
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-status-nominal)",
+                backgroundColor: "rgba(0, 255, 136, 0.1)",
+                border: "1px solid rgba(0, 255, 136, 0.2)",
+                padding: "0.15rem 0.4rem",
+                borderRadius: "0.2rem",
+                marginRight: "0.25rem",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Video size={10} /> REC MP4
+            </span>
+          )}
+          <button
+            onClick={() => setIsFullscreen((f) => !f)}
+            style={{
+              background: "none",
+              border: "none",
+              color: isFullscreen ? "var(--color-status-nominal)" : "var(--color-text-muted)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              padding: "0.25rem",
+              borderRadius: "0.25rem",
+            }}
+            title="Toggle fullscreen video feed"
+          >
+            {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          </button>
           <button
             onClick={() => setShowSelector((prev) => !prev)}
             style={{
@@ -176,15 +214,16 @@ export const CameraPanel = React.memo(function CameraPanel() {
         </div>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        {/* Video feed viewport */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", height: "100%" }}>
+        {/* Video feed viewport — Auto-stretching to fill panel height */}
         <div
           style={{
+            flex: 1,
+            minHeight: 260,
             width: "100%",
-            height: 190,
             position: "relative",
             borderRadius: "0.25rem",
-            backgroundColor: "var(--color-bg-tertiary)",
+            backgroundColor: "#050a14",
             overflow: "hidden",
             border: "1px solid var(--color-border-default)",
             display: "flex",
@@ -201,7 +240,8 @@ export const CameraPanel = React.memo(function CameraPanel() {
                 style={{
                   width: "100%",
                   height: "100%",
-                  objectFit: "cover",
+                  objectFit: "contain",
+                  backgroundColor: "#000",
                 }}
               />
               {/* Live Overlay */}
@@ -213,13 +253,14 @@ export const CameraPanel = React.memo(function CameraPanel() {
                   display: "flex",
                   alignItems: "center",
                   gap: "0.375rem",
-                  backgroundColor: "rgba(0, 0, 0, 0.65)",
+                  backgroundColor: "rgba(0, 0, 0, 0.75)",
                   padding: "0.25rem 0.5rem",
                   borderRadius: "0.25rem",
                   fontSize: "0.625rem",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   color: "var(--color-status-nominal)",
-                  border: "1px solid rgba(0, 255, 136, 0.3)",
+                  border: "1px solid rgba(0, 255, 136, 0.4)",
+                  fontFamily: "var(--font-mono)",
                 }}
               >
                 <span
@@ -231,18 +272,20 @@ export const CameraPanel = React.memo(function CameraPanel() {
                     boxShadow: "0 0 8px var(--color-status-nominal)",
                   }}
                 />
-                LIVE
+                LIVE PAYLOAD FEED
               </div>
+
               {/* Camera Label Overlay */}
               <div
                 style={{
                   position: "absolute",
                   bottom: "0.5rem",
                   left: "0.5rem",
-                  backgroundColor: "rgba(0, 0, 0, 0.65)",
+                  backgroundColor: "rgba(0, 0, 0, 0.75)",
                   padding: "0.25rem 0.5rem",
                   borderRadius: "0.25rem",
                   fontSize: "0.625rem",
+                  fontFamily: "var(--font-mono)",
                   color: "var(--color-text-secondary)",
                   maxWidth: "85%",
                   whiteSpace: "nowrap",
@@ -255,47 +298,93 @@ export const CameraPanel = React.memo(function CameraPanel() {
               </div>
             </>
           ) : (
+            /* High-Contrast Aerospace Standby HUD */
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: "0.5rem",
-                padding: "1rem",
+                justifyContent: "center",
+                gap: "0.75rem",
+                padding: "1.5rem 1rem",
                 textAlign: "center",
+                width: "100%",
+                height: "100%",
+                background: "radial-gradient(circle at center, rgba(0,200,255,0.05) 0%, rgba(5,10,20,0.95) 70%)",
               }}
             >
-              <CameraOff size={28} style={{ color: "var(--color-text-muted)" }} />
-              <span
+              {/* Radar Icon Circle */}
+              <div
                 style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  color: "var(--color-text-secondary)",
+                  width: 54,
+                  height: 54,
+                  borderRadius: "50%",
+                  border: "1.5px dashed rgba(148, 163, 184, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(15, 23, 42, 0.6)",
+                  boxShadow: "0 0 20px rgba(0,0,0,0.5)",
                 }}
               >
-                {isScanning
-                  ? t("dashboard.team.cameraScanning", "Scanning Devices...")
-                  : t("dashboard.team.cameraDisconnected", "Camera Disconnected")}
-              </span>
-              <span
+                <CameraOff size={24} style={{ color: "var(--color-text-muted)" }} />
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontSize: "0.8125rem",
+                    fontWeight: 700,
+                    color: "var(--color-text-secondary)",
+                    fontFamily: "var(--font-mono)",
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {isScanning
+                    ? t("dashboard.team.cameraScanning", "SCANNING USB PORTS...")
+                    : t("dashboard.team.cameraDisconnected", "CAMERA STANDBY / DISCONNECTED")}
+                </div>
+                <div
+                  style={{
+                    fontSize: "0.6875rem",
+                    color: "var(--color-text-muted)",
+                    maxWidth: 280,
+                    lineHeight: "1.4",
+                    marginTop: 4,
+                  }}
+                >
+                  {error ||
+                    t(
+                      "dashboard.team.cameraHint",
+                      "Connect an external USB payload camera. Auto-detect & session recording active.",
+                    )}
+                </div>
+              </div>
+
+              {/* Status Poller Badge */}
+              <div
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
                   fontSize: "0.625rem",
+                  fontFamily: "var(--font-mono)",
                   color: "var(--color-text-muted)",
-                  maxWidth: 240,
-                  lineHeight: "1.3",
+                  backgroundColor: "rgba(255,255,255,0.03)",
+                  padding: "0.2rem 0.5rem",
+                  borderRadius: "0.25rem",
+                  border: "1px solid var(--color-border-default)",
                 }}
               >
-                {error ||
-                  t(
-                    "dashboard.team.cameraHint",
-                    "Connect an external USB payload/rocket camera to start the feed.",
-                  )}
-              </span>
+                <Radio size={10} style={{ color: "var(--color-status-info)" }} />
+                <span>USB AUTO-DETECTOR POLLING ACTIVE</span>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Manual selector dropdown (toggled ONLY via settings button) */}
+        {/* Manual selector dropdown */}
         {showSelector && devicesList.length > 0 && (
           <div
             style={{
@@ -344,6 +433,64 @@ export const CameraPanel = React.memo(function CameraPanel() {
           </div>
         )}
       </div>
+
+      {/* Fullscreen Overlay Modal */}
+      {isFullscreen && frameSrc && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.95)",
+            zIndex: 99999,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: "1rem",
+              right: "1rem",
+              display: "flex",
+              gap: "0.5rem",
+            }}
+          >
+            <button
+              onClick={() => setIsFullscreen(false)}
+              style={{
+                backgroundColor: "var(--color-bg-secondary)",
+                color: "var(--color-text-primary)",
+                border: "1px solid var(--color-border-default)",
+                padding: "0.5rem 1rem",
+                borderRadius: "0.25rem",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "0.75rem",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Minimize2 size={14} /> Exit Fullscreen
+            </button>
+          </div>
+          <img
+            src={frameSrc}
+            alt="Fullscreen Payload Camera Feed"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+            }}
+          />
+        </div>
+      )}
     </PanelContainer>
   );
 });
