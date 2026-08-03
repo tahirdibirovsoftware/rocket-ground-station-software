@@ -57,10 +57,11 @@ function drawChart(
     return;
   }
 
-  // Use last 60 seconds of data
+  // Use rolling 60-second window, or start from first point if total session time < 60s
+  const firstT = data[0].t;
   const lastT = data[data.length - 1].t;
   const windowMs = 60000;
-  const startT = lastT - windowMs;
+  const startT = lastT - firstT < windowMs ? firstT : lastT - windowMs;
   const visible = data.filter((d) => d.t >= startT);
   if (visible.length < 2) return;
 
