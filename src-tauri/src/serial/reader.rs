@@ -37,6 +37,7 @@ pub struct FrameParser {
     // Flight State Estimator State
     max_altitude: f32,
     last_altitude: f32,
+    last_timestamp_ms: u32,
     current_flight_state: FlightState,
     primary_parachute_deployed: bool,
     secondary_parachute_deployed: bool,
@@ -50,6 +51,7 @@ impl FrameParser {
             stats: ReaderStats::default(),
             max_altitude: 0.0,
             last_altitude: 0.0,
+            last_timestamp_ms: 0,
             current_flight_state: FlightState::Pad,
             primary_parachute_deployed: false,
             secondary_parachute_deployed: false,
@@ -139,9 +141,20 @@ impl FrameParser {
         }
     }
 
-    /// Estimate the rocket flight phase.
+    /// Estimate the rocket flight phase and barometric vertical velocity.
     fn estimate_rocket_state(&mut self, packet: &mut TelemetryPacket) {
         let alt = packet.altitude;
+
+        // 0. Fallback: Compute barometric vertical velocity (dh/dt) if gps_speed is zero
+        if packet.gps_speed.abs() < 0.001 && self.last_timestamp_ms > 0 && packet.timestamp_ms > self.last_timestamp_ms {
+            let dt = (packet.timestamp_ms - self.last_timestamp_ms) as f32 / 1000.0;
+            if dt > 0.01 {
+                let inst_v = (alt - self.last_altitude) / dt;
+                // Low-pass filter to smooth pressure quantization noise
+                packet.gps_speed = (inst_v * 10.0).round() / 10.0;
+            }
+        }
+        self.last_timestamp_ms = packet.timestamp_ms;
 
         // 1. Update max altitude
         if alt > self.max_altitude {
@@ -193,6 +206,7 @@ impl FrameParser {
         self.buffer.clear();
         self.max_altitude = 0.0;
         self.last_altitude = 0.0;
+        self.last_timestamp_ms = 0;
         self.current_flight_state = FlightState::Pad;
         self.primary_parachute_deployed = false;
         self.secondary_parachute_deployed = false;
