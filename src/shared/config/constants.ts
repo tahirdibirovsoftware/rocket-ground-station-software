@@ -17,6 +17,7 @@ export const IPC_EVENTS = {
 export const IPC_COMMANDS = {
   CONNECT_RFD: "connect_rfd",
   DISCONNECT_RFD: "disconnect_rfd",
+  SET_DRONE_ENGINE: "set_drone_engine",
   LIST_SERIAL_PORTS: "list_serial_ports",
   START_MOCK: "start_mock",
   STOP_MOCK: "stop_mock",

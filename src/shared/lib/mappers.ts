@@ -33,6 +33,13 @@ interface RawTelemetryPacket {
   flight_state: string;
   primary_parachute_deployed: boolean;
   secondary_parachute_deployed: boolean;
+  rel_alt?: number;
+  vertical_velocity?: number;
+  g_force?: number;
+  dpdt?: number;
+  armed?: boolean;
+  state_code?: number;
+  throttle_us?: number;
 }
 
 const FLIGHT_STATE_MAP: Record<string, FlightState> = {
@@ -75,6 +82,13 @@ export function mapTelemetryPacket(raw: RawTelemetryPacket): TelemetryPacket {
     flightState: FLIGHT_STATE_MAP[raw.flight_state] ?? FlightState.Pad,
     primaryParachuteDeployed: raw.primary_parachute_deployed,
     secondaryParachuteDeployed: raw.secondary_parachute_deployed,
+    relAlt: raw.rel_alt ?? 0,
+    verticalVelocity: raw.vertical_velocity ?? 0,
+    gForce: raw.g_force ?? 0,
+    dpdt: raw.dpdt ?? 0,
+    armed: raw.armed ?? false,
+    stateCode: raw.state_code ?? 0,
+    throttleUs: raw.throttle_us ?? 0,
     receivedAt: Date.now(),
   };
 }

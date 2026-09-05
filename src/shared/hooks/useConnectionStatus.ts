@@ -14,6 +14,8 @@ export interface ConnectionStatus {
   payload_packets_received: number;
   drone_packets_received: number;
   checksum_failures: number;
+  uplink_acks: number;
+  last_uplink_ack: boolean | null;
   uptime_ms: number;
 }
 

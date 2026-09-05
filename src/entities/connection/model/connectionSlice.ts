@@ -17,6 +17,10 @@ export interface ConnectionSliceState {
   dronePacketsReceived: number;
   /** Total checksum failures (from backend). */
   checksumFailures: number;
+  /** Drone uplink command ACK count ("1"/"0" echoes from flight controller). */
+  uplinkAcks: number;
+  /** Last drone uplink ACK value (true = ARMed, false = DISARMed). */
+  lastUplinkAck: boolean | null;
   /** Backend uptime in milliseconds. */
   uptimeMs: number;
   /** Whether the connection panel is loading. */
@@ -32,6 +36,8 @@ const initialState: ConnectionSliceState = {
   payloadPacketsReceived: 0,
   dronePacketsReceived: 0,
   checksumFailures: 0,
+  uplinkAcks: 0,
+  lastUplinkAck: null,
   uptimeMs: 0,
   isLoading: false,
   error: null,
@@ -50,6 +56,8 @@ export const connectionSlice = createSlice({
       state.payloadPacketsReceived = s.payload_packets_received;
       state.dronePacketsReceived = s.drone_packets_received;
       state.checksumFailures = s.checksum_failures;
+      state.uplinkAcks = s.uplink_acks ?? 0;
+      state.lastUplinkAck = s.last_uplink_ack ?? null;
       state.uptimeMs = s.uptime_ms;
       state.isLoading = false;
       state.error = null;

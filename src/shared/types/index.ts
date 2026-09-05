@@ -44,7 +44,15 @@ export interface TelemetryPacket {
   flightState: FlightState;
   primaryParachuteDeployed: boolean;
   secondaryParachuteDeployed: boolean;
-  receivedAt: number;              // frontend timestamp (Date.now())
+  /* ── Drone flight-control fields (CC only, 0/false for AA/BB) ── */
+  relAlt: number;              // relative altitude above takeoff (m)
+  verticalVelocity: number;    // climb rate (m/s, + up)
+  gForce: number;              // G-loading (g)
+  dpdt: number;                // pressure change rate (hPa/s)
+  armed: boolean;              // RF ARM command state
+  stateCode: number;           // 0=DISARMED, 1=ARMED, 2=MOTORS_ON
+  throttleUs: number;          // ESC pulse width (1000..2000 us)
+  receivedAt: number;          // frontend timestamp (Date.now())
 }
 
 /* ── Connection State ── */

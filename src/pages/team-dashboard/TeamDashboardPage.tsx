@@ -4,6 +4,7 @@ import { ConnectionPanel } from "@widgets/connection-panel";
 import { AvionicsSummary } from "@widgets/avionics-summary";
 import { PayloadSummary } from "@widgets/payload-summary";
 import { DroneSummary } from "@widgets/drone-summary";
+import { DroneControl } from "@widgets/drone-control";
 import { SystemHealth } from "@widgets/system-health";
 import { FlightTimeline } from "@widgets/flight-timeline";
 import { TelemetryChart } from "@widgets/charts";
@@ -71,7 +72,7 @@ export function TeamDashboardPage() {
         }}
       >
         {/* Column 1: Rocket Avionics + Charts */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, minHeight: 0, overflowY: "auto", paddingRight: "0.25rem" }}>
           <AvionicsSummary />
           <TelemetryChart
             id="chart-altitude"
@@ -94,7 +95,7 @@ export function TeamDashboardPage() {
         </div>
 
         {/* Column 2: Payload + Pressure Chart + Map */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0, overflowY: "auto", paddingRight: "0.25rem" }}>
           <PayloadSummary />
           <TelemetryChart
             id="chart-pressure"
@@ -108,10 +109,11 @@ export function TeamDashboardPage() {
           <TelemetryMap style={{ flex: 1, minHeight: 260 }} />
         </div>
 
-        {/* Column 3: Connection + Health + Drone + Camera */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0 }}>
+        {/* Column 3: Connection + Drone Control + Health + Drone + Camera */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0, overflowY: "auto", paddingRight: "0.25rem" }}>
           <ConnectionPanel />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <DroneControl />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
             <SystemHealth />
             <DroneSummary />
           </div>

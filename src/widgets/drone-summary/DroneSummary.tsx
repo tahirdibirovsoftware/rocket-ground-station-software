@@ -18,10 +18,17 @@ export const DroneSummary = React.memo(function DroneSummary() {
   const latest = useAppSelector(selectLatestDronePacket);
   const count = useAppSelector(selectDronePacketCount);
 
+  const stateLabel = (code: number) =>
+    code === 2
+      ? t("droneControl.stateMotorsOn")
+      : code === 1
+        ? t("droneControl.stateArmed")
+        : t("droneControl.stateDisabled");
+
   return (
     <PanelContainer
       id="drone-summary"
-      title="Drone Telemetry"
+      title={t("droneTelemetry.title", "Drone Telemetry")}
       icon={<Navigation size={14} />}
       headerRight={
         <span
@@ -40,12 +47,31 @@ export const DroneSummary = React.memo(function DroneSummary() {
             unit={t("units.meters")}
           />
           <TelemetryValue
-            label="Drone Speed"
+            label={t("droneTelemetry.speed", "Drone Speed")}
             value={latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed.toFixed(1) : "---"}
             unit="m/s"
             color="var(--color-status-nominal)"
           />
+          <TelemetryValue
+            label={t("droneControl.state", "Flight State")}
+            value={latest ? stateLabel(latest.stateCode) : "---"}
+            color={latest && latest.stateCode === 2 ? "var(--color-status-nominal)" : latest && latest.armed ? "var(--color-status-warning)" : undefined}
+          />
+          <TelemetryValue
+            label={t("droneTelemetry.climbRate", "Climb Rate")}
+            value={latest && typeof latest.verticalVelocity === "number" ? latest.verticalVelocity.toFixed(2) : "---"}
+            unit="m/s"
+            color={latest && latest.verticalVelocity > 0 ? "var(--color-status-nominal)" : undefined}
+          />
         </div>
+        <DataRow
+          label={t("droneTelemetry.relativeAltitude", "Relative Altitude")}
+          value={latest && typeof latest.relAlt === "number" ? `${latest.relAlt.toFixed(1)} m` : "---"}
+        />
+        <DataRow
+          label={t("droneTelemetry.gForce", "G-Force")}
+          value={latest && typeof latest.gForce === "number" ? `${latest.gForce.toFixed(2)} g` : "---"}
+        />
         <DataRow
           label={t("telemetry.latitude")}
           value={latest && typeof latest.latitude === "number" ? latest.latitude.toFixed(6) : "---"}
@@ -55,7 +81,7 @@ export const DroneSummary = React.memo(function DroneSummary() {
           value={latest && typeof latest.longitude === "number" ? latest.longitude.toFixed(6) : "---"}
         />
         <DataRow
-          label="Drone Course"
+          label={t("droneTelemetry.course", "Drone Course")}
           value={latest && typeof latest.gpsCourse === "number" ? `${latest.gpsCourse.toFixed(1)}°` : "---"}
         />
         <DataRow
