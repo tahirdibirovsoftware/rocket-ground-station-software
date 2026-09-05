@@ -682,3 +682,31 @@ Modified:
 - **Backend Microservices** — The Rust backend drops standard "Global" assumptions. It now manages threaded serial streams as isolated components (`connect_rocket`, `connect_payload`), guaranteeing that an un-plugged Payload Arduino won't crash the Rocket thread.
 - **Frontend Hybrid Orchestrator** — A global generic connection is highly convenient, so React preserves a "Global Connect" button that blasts out independent API commands concurrently via `Promise.allSettled()`. It natively intercepts failed promises to print soft inline alert notifications while allowing the successful threads to keep running natively!
 - **State-Reactive UI** — Individual Connect/Disconnect buttons passively listen to the Redux active ports (`rocketConnected`). If you toggle "Global Connect", the individual card buttons seamlessly auto-sync to their "Disconnect" variants instantly.
+
+---
+
+## Phase 13 — Teensy Payload/Drone Compatibility & Drone Engine Control ✓
+
+**Completed:** 2026-09-02
+
+### What was done
+
+| Task | Status |
+|------|--------|
+| Parse the Teensy drone (CC) 32-field packet: 25 base fields + `rel_alt, vel, g_force, dpdt, armed, state_code, throttle` | Done |
+| Keep BB payload / AA rocket 25-field format unchanged (verified identical to firmware) | Done |
+| Handle `N` sensor-off placeholders in all streams | Done |
+| Mock generator emits the full 32-field drone packet with a simulated flight-control state machine (DISARMED → ARMED → MOTORS_ON) | Done |
+| `set_drone_engine` Tauri command: writes '1' (ARM) / '0' (DISARM) over the RFD serial downlink; applies to Mock drone in Mock mode | Done |
+| Shared `rfd_writer` (`Arc<Mutex<Box<dyn SerialPort>>>`) in `AppState` so reader thread and commands share the port | Done |
+| Drone CSV log extended with flight-control columns; unified CSV uses vertical velocity | Done |
+| New `DroneControl` widget: ARM / DISARM buttons, live state/armed/throttle readout, safety confirm on ARM | Done |
+| `DroneSummary` extended: flight state, climb rate, relative altitude, G-force | Done |
+| 109 cargo tests (incl. drone 32-field parse, N-placeholders, arm override) + 59 Vitest tests | Done |
+
+### Key Decisions
+
+- **Drone state_code is hardware truth** — the ground station displays the drone's own flight-controller state (0=DISARMED, 1=ARMED, 2=MOTORS_ON) instead of estimating it.
+- **Command = single ASCII byte** — matching `rf_command.cpp` on the Teensy: `'1'` arms, `'0'` disarms; telemetry `armed` field echoes ground truth back to the UI.
+- **Mock parity** — `MockState.drone_arm_command()` overrides the auto-arm profile so the button can be bench-tested without hardware.
+
