@@ -22,6 +22,7 @@ pub fn run() {
             commands::list_serial_ports,
             commands::connect_rfd,
             commands::disconnect_rfd,
+            commands::set_drone_engine,
             commands::start_mock,
             commands::stop_mock,
             commands::reset_mock,

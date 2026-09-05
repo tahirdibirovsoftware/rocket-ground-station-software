@@ -55,6 +55,8 @@ fn connection_status_defaults() {
     assert_eq!(status.payload_packets_received, 0);
     assert_eq!(status.drone_packets_received, 0);
     assert_eq!(status.checksum_failures, 0);
+    assert_eq!(status.uplink_acks, 0);
+    assert_eq!(status.last_uplink_ack, None);
     assert_eq!(status.uptime_ms, 0);
 }
 
@@ -67,6 +69,8 @@ fn connection_status_serialization() {
         payload_packets_received: 210,
         drone_packets_received: 10,
         checksum_failures: 3,
+        uplink_acks: 2,
+        last_uplink_ack: Some(true),
         uptime_ms: 60000,
     };
 
@@ -75,11 +79,14 @@ fn connection_status_serialization() {
     assert!(json.contains("ttyUSB0"));
     assert!(json.contains("42"));
     assert!(json.contains("210"));
+    assert!(json.contains("\"last_uplink_ack\":true"));
 
     // Round-trip
     let parsed: ConnectionStatus = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed.mode, ConnectionMode::Serial);
     assert_eq!(parsed.rocket_packets_received, 42);
+    assert_eq!(parsed.uplink_acks, 2);
+    assert_eq!(parsed.last_uplink_ack, Some(true));
 }
 
 #[test]
@@ -125,6 +132,22 @@ fn app_state_sync_stats() {
     assert_eq!(status.rocket_packets_received, 1);
     assert_eq!(status.payload_packets_received, 2);
     assert_eq!(status.checksum_failures, 0);
+}
+
+#[test]
+fn app_state_sync_uplink_acks() {
+    let state = AppState::new();
+
+    {
+        let mut parser = state.frame_parser.lock().unwrap();
+        parser.feed(b"1\n");
+        parser.feed(b"0\n");
+    }
+
+    state.sync_stats();
+    let status = state.connection_status.lock().unwrap();
+    assert_eq!(status.uplink_acks, 2);
+    assert_eq!(status.last_uplink_ack, Some(false));
 }
 
 #[test]

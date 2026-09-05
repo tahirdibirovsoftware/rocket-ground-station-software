@@ -24,6 +24,10 @@ pub struct ReaderStats {
     pub checksum_failures: u64,
     pub framing_errors: u64,
     pub bytes_processed: u64,
+    /// Count of drone uplink command ACKs received ("1" / "0" lines).
+    pub uplink_acks: u64,
+    /// Last drone uplink ACK value (Some(true) = ARMed, Some(false) = DISARMed).
+    pub last_uplink_ack: Option<bool>,
 }
 
 /// State machine for extracting framed CSV packets from a raw byte stream.
@@ -81,6 +85,15 @@ impl FrameParser {
                         if let Some(pkt) = self.parse_line(&line_owned) {
                             packets.push(pkt);
                         }
+                    }
+                } else if self.buffer.len() <= 3 {
+                    // Uplink command ACK from the drone flight controller:
+                    // echoes a bare "1" (ARM) or "0" (DISARM) line over the RF link.
+                    let line = std::str::from_utf8(&self.buffer).unwrap_or("");
+                    let trimmed = line.trim();
+                    if trimmed == "1" || trimmed == "0" {
+                        self.stats.uplink_acks += 1;
+                        self.stats.last_uplink_ack = Some(trimmed == "1");
                     }
                 }
                 self.buffer.clear();

@@ -29,6 +29,8 @@ pub struct ConnectionStatus {
     pub payload_packets_received: u64,
     pub drone_packets_received: u64,
     pub checksum_failures: u64,
+    pub uplink_acks: u64,
+    pub last_uplink_ack: Option<bool>,
     pub uptime_ms: u64,
 }
 
@@ -41,6 +43,8 @@ impl Default for ConnectionStatus {
             payload_packets_received: 0,
             drone_packets_received: 0,
             checksum_failures: 0,
+            uplink_acks: 0,
+            last_uplink_ack: None,
             uptime_ms: 0,
         }
     }
@@ -60,6 +64,8 @@ pub struct AppState {
     pub rfd_cancel: Arc<std::sync::atomic::AtomicBool>,
     /// Handle to cancel the Mock data loop.
     pub mock_cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Shared RFD serial writer (for downlink commands such as drone ARM/DISARM).
+    pub rfd_writer: Mutex<Option<Arc<Mutex<Box<dyn serialport::SerialPort>>>>>,
     /// Native camera streaming state.
     pub camera_state: crate::camera::CameraState,
 }
@@ -73,6 +79,7 @@ impl AppState {
             connection_status: Mutex::new(ConnectionStatus::default()),
             rfd_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             mock_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            rfd_writer: Mutex::new(None),
             camera_state: crate::camera::CameraState::new(),
         }
     }
@@ -85,6 +92,8 @@ impl AppState {
         status.payload_packets_received = parser.stats.payload_packets;
         status.drone_packets_received = parser.stats.drone_packets;
         status.checksum_failures = parser.stats.checksum_failures;
+        status.uplink_acks = parser.stats.uplink_acks;
+        status.last_uplink_ack = parser.stats.last_uplink_ack;
     }
 }
 

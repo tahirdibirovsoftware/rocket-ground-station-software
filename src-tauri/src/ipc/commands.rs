@@ -1,9 +1,9 @@
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, State, Manager};
 
 use crate::mock::generator::{MockGenerator, MockPacket};
-use crate::protocol::telemetry_packet::TelemetryPacket;
 
 use crate::serial::config::{list_available_ports, PortInfo, SerialPortConfig};
 use crate::serial::reader::{FrameParser, ParsedPacket};
@@ -49,7 +49,12 @@ pub async fn connect_rfd(
             }
 
             state.rfd_cancel.store(false, Ordering::Relaxed);
-            spawn_serial_reader_loop(app.clone(), state.rfd_cancel.clone(), serial_port);
+            let port_arc = Arc::new(Mutex::new(serial_port));
+            {
+                let mut writer = state.rfd_writer.lock().unwrap();
+                *writer = Some(port_arc.clone());
+            }
+            spawn_serial_reader_loop(app.clone(), state.rfd_cancel.clone(), port_arc);
 
             let session_dir = {
                 let mut logger = state.csv_logger.lock().unwrap();
@@ -90,6 +95,8 @@ pub fn disconnect_rfd(
         state.frame_parser.lock().unwrap().reset();
         let mut logger = state.csv_logger.lock().unwrap();
         *logger = None;
+        let mut writer = state.rfd_writer.lock().unwrap();
+        *writer = None;
     }
 
     let status_clone = state.connection_status.lock().unwrap().clone();
@@ -99,10 +106,66 @@ pub fn disconnect_rfd(
     Ok("Disconnected".to_string())
 }
 
+/// Command the drone engine over the RFD downlink.
+///
+/// Sends a single ASCII byte over the connected RFD serial port:
+/// '1' = ARM (engine ON), '0' = DISARM (engine OFF).
+/// In Mock mode the command is applied to the simulated drone instead.
+#[tauri::command]
+pub fn set_drone_engine(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<String, String> {
+    use std::io::Write;
+
+    let mode = state.connection_status.lock().unwrap().mode.clone();
+
+    match mode {
+        ConnectionMode::Serial => {
+            let writer = state.rfd_writer.lock().unwrap();
+            let port_arc = writer
+                .as_ref()
+                .ok_or_else(|| "RFD serial writer unavailable".to_string())?;
+            let mut port = port_arc
+                .lock()
+                .map_err(|_| "RFD serial writer lock poisoned".to_string())?;
+
+            let cmd: [u8; 1] = if enabled { [b'1'] } else { [b'0'] };
+            port.write_all(&cmd)
+                .map_err(|e| format!("Failed to send drone command: {e}"))?;
+            port.flush()
+                .map_err(|e| format!("Failed to flush RFD serial: {e}"))?;
+
+            log::info!(
+                "Sent drone engine command: {}",
+                if enabled { "ARM (1)" } else { "DISARM (0)" }
+            );
+            Ok(format!(
+                "Drone engine {}",
+                if enabled { "ARMED" } else { "DISARMED" }
+            ))
+        }
+        ConnectionMode::Mock => {
+            state.mock_state.set_drone_arm(enabled);
+            log::info!(
+                "Mock drone engine command: {}",
+                if enabled { "ARM (1)" } else { "DISARM (0)" }
+            );
+            Ok(format!(
+                "Mock drone engine {}",
+                if enabled { "ARMED" } else { "DISARMED" }
+            ))
+        }
+        ConnectionMode::Disconnected => {
+            Err("RFD link is not connected. Connect RFD or start Mock first.".to_string())
+        }
+    }
+}
+
 fn spawn_serial_reader_loop(
     app_handle: AppHandle,
     cancel_token: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    mut port: Box<dyn serialport::SerialPort>,
+    port: std::sync::Arc<std::sync::Mutex<Box<dyn serialport::SerialPort>>>,
 ) {
     use tauri::Manager;
     std::thread::spawn(move || {
@@ -112,12 +175,24 @@ fn spawn_serial_reader_loop(
         log::info!("Hardware reader loop started");
 
         while !cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
-            match port.read(&mut buffer) {
+            let read_result = {
+                let mut port_guard = port.lock().unwrap();
+                port_guard.read(&mut buffer)
+            };
+
+            match read_result {
                 Ok(n) if n > 0 => {
                     let parsed = parser.feed(&buffer[0..n]);
-                    
+
+                    // Propagate uplink command ACK stats from the parser
+                    let state: State<'_, AppState> = app_handle.state();
+                    {
+                        let mut status = state.connection_status.lock().unwrap();
+                        status.uplink_acks = parser.stats.uplink_acks;
+                        status.last_uplink_ack = parser.stats.last_uplink_ack;
+                    }
+
                     if !parsed.is_empty() {
-                        let state: State<'_, AppState> = app_handle.state();
                         for p in parsed {
                             let mut logger = state.csv_logger.lock().unwrap();
                             match p {
@@ -230,7 +305,7 @@ pub async fn start_mock(
             let elapsed_ms = start_time.elapsed().as_millis() as u64;
             mock_state.set_elapsed_ms(elapsed_ms);
 
-            let packets = generator.generate_tick(tick);
+            let packets = generator.generate_tick_with_arm(tick, mock_state.drone_arm_command());
 
             if packets.is_empty() {
                 log::info!("Mock flight simulation complete at tick {tick}");
@@ -246,8 +321,13 @@ pub async fn start_mock(
                 };
 
                 let parsed = frame_parser.feed(bytes);
+                let state: State<'_, AppState> = app_handle.state();
+                {
+                    let mut status = state.connection_status.lock().unwrap();
+                    status.uplink_acks = frame_parser.stats.uplink_acks;
+                    status.last_uplink_ack = frame_parser.stats.last_uplink_ack;
+                }
                 for p in parsed {
-                    let state: State<'_, AppState> = app_handle.state();
                     let mut logger = state.csv_logger.lock().unwrap();
                     match p {
                         ParsedPacket::Rocket(ref rkt) => {
