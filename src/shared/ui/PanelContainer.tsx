@@ -53,6 +53,7 @@ export const PanelContainer = React.memo(function PanelContainer({
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
+        flexShrink: 0,
         ...style,
       }}
     >

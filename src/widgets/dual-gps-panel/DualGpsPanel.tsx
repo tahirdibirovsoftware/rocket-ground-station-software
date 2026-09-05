@@ -95,7 +95,9 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
             }}
           >
             <Compass size={12} />
-            Separation Vector: {separationDistance.toFixed(1)}m
+            {t("dashboard.referee.separationVector", {
+              distance: separationDistance.toFixed(1),
+            })}
           </div>
         ) : undefined
       }
@@ -157,7 +159,7 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
                   cursor: "pointer",
                   padding: "0.15rem",
                 }}
-                title="Copy Rocket GPS Coordinates"
+                title={t("dashboard.referee.copyRocketCoords", "Copy Rocket GPS Coordinates")}
               >
                 {copiedKey === "rocket" ? <Check size={12} color="var(--color-status-nominal)" /> : <Copy size={12} />}
               </button>
@@ -220,7 +222,7 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
                   cursor: "pointer",
                   padding: "0.15rem",
                 }}
-                title="Copy Payload GPS Coordinates"
+                title={t("dashboard.referee.copyPayloadCoords", "Copy Payload GPS Coordinates")}
               >
                 {copiedKey === "payload" ? <Check size={12} color="var(--color-status-nominal)" /> : <Copy size={12} />}
               </button>
@@ -268,7 +270,7 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
                   letterSpacing: "0.05em",
                 }}
               >
-                Drone GPS
+                {t("dashboard.referee.droneGPS", "Drone GPS")}
               </span>
               <button
                 onClick={() =>
@@ -283,7 +285,7 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
                   cursor: "pointer",
                   padding: "0.15rem",
                 }}
-                title="Copy Drone GPS Coordinates"
+                title={t("dashboard.referee.copyDroneCoords", "Copy Drone GPS Coordinates")}
               >
                 {copiedKey === "drone" ? <Check size={12} color="var(--color-status-nominal)" /> : <Copy size={12} />}
               </button>
@@ -326,10 +328,12 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
             <Radio size={12} style={{ color: "var(--color-status-nominal)" }} />
-            <span>GPS Satellite Lock: 3D Multi-Constellation</span>
+            <span>{t("dashboard.referee.gpsSatelliteLock", "GPS Satellite Lock: 3D Multi-Constellation")}</span>
           </div>
           <span style={{ color: "var(--color-status-nominal)", fontWeight: 700 }}>
-            {rocketGps?.lat ? "FIX LOCKED" : "SEARCHING"}
+            {rocketGps?.lat
+              ? t("dashboard.referee.fixLocked", "FIX LOCKED")
+              : t("dashboard.referee.searching", "SEARCHING")}
           </span>
         </div>
       </div>

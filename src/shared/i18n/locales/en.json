@@ -58,6 +58,36 @@
     "milliseconds": "ms",
     "hertz": "Hz"
   },
+  "droneControl": {
+    "title": "Drone Engine Control",
+    "state": "Flight State",
+    "armed": "Armed",
+    "throttle": "Throttle",
+    "yes": "YES",
+    "no": "NO",
+    "stateDisabled": "DISARMED",
+    "stateArmed": "ARMED",
+    "stateMotorsOn": "MOTORS ON",
+    "unknownState": "CODE {{code}}",
+    "ackLabel": "CMD ACK: {{state}} ({{count}} received)",
+    "ackArmed": "ARMED",
+    "ackDisarmed": "DISARMED",
+    "ackWaiting": "CMD ACK: WAITING (drone echoes '1'/'0' after state change)",
+    "ackMock": "SIMULATED ACK: commands applied to mock drone",
+    "armEngine": "ARM ENGINE",
+    "disarmEngine": "DISARM ENGINE",
+    "linkOffline": "RFD link offline — connect RFD or start Mock to control the drone.",
+    "mockHint": "Mock mode — commands are applied to the simulated drone.",
+    "rfdHint": "Commands sent over RFD downlink ('1' = ARM, '0' = DISARM)."
+  },
+  "droneTelemetry": {
+    "title": "Drone Telemetry",
+    "speed": "Drone Speed",
+    "climbRate": "Climb Rate",
+    "relativeAltitude": "Relative Altitude",
+    "gForce": "G-Force",
+    "course": "Drone Course"
+  },
   "dashboard": {
     "team": {
       "title": "Team Dashboard",
@@ -74,7 +104,18 @@
       "title": "Referee Dashboard",
       "rocketGPS": "Rocket GPS",
       "payloadGPS": "Payload GPS",
-      "scientificData": "Scientific Data"
+      "droneGPS": "Drone GPS",
+      "scientificData": "Scientific Data",
+      "gpsTracking": "Tri-System GPS Positioning",
+      "copyRocketCoords": "Copy Rocket GPS Coordinates",
+      "copyPayloadCoords": "Copy Payload GPS Coordinates",
+      "copyDroneCoords": "Copy Drone GPS Coordinates",
+      "separationVector": "Separation Vector: {{distance}}m",
+      "gpsSatelliteLock": "GPS Satellite Lock: 3D Multi-Constellation",
+      "fixLocked": "FIX LOCKED",
+      "searching": "SEARCHING",
+      "mapTitle": "Map",
+      "rfdLink": "RFD Link"
     }
   }
 }

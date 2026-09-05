@@ -5,6 +5,7 @@ import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { MapPin } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PanelContainer } from "@shared/ui";
 import { useAppSelector } from "@app/store";
 import { selectRocketGps, selectRocketHistory } from "@entities/rocket-packet";
@@ -89,6 +90,7 @@ function MapAutoCenter({ lat, lng }: { lat: number; lng: number }) {
 }
 
 export const TelemetryMap = React.memo(function TelemetryMap({ style }: TelemetryMapProps) {
+  const { t } = useTranslation();
   const rocketGps = useAppSelector(selectRocketGps);
   const payloadGps = useAppSelector(selectPayloadGps);
   const droneGps = useAppSelector(selectDroneGps);
@@ -122,7 +124,7 @@ export const TelemetryMap = React.memo(function TelemetryMap({ style }: Telemetr
   return (
     <PanelContainer
       id="telemetry-map"
-      title="Map"
+      title={t("dashboard.referee.mapTitle", "Map")}
       icon={<MapPin size={14} />}
       style={style}
     >

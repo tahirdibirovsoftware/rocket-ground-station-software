@@ -58,6 +58,36 @@
     "milliseconds": "ms",
     "hertz": "Hz"
   },
+  "droneControl": {
+    "title": "Drone Motor Kontrolü",
+    "state": "Uçuş Durumu",
+    "armed": "Aktif",
+    "throttle": "Gaz",
+    "yes": "EVET",
+    "no": "HAYIR",
+    "stateDisabled": "PASİF",
+    "stateArmed": "AKTİF",
+    "stateMotorsOn": "MOTORLAR AÇIK",
+    "unknownState": "KOD {{code}}",
+    "ackLabel": "KOMUT ONAYI: {{state}} ({{count}} alındı)",
+    "ackArmed": "AKTİF",
+    "ackDisarmed": "PASİF",
+    "ackWaiting": "KOMUT ONAYI: BEKLENİYOR (drone durum değişikliğinden sonra '1'/'0' yansıtır)",
+    "ackMock": "SİMÜLE ONAY: komutlar sanal drone'a uygulandı",
+    "armEngine": "MOTORU AKTİF ET",
+    "disarmEngine": "MOTORU PASİF ET",
+    "linkOffline": "RFD bağlantısı kapalı — drone'u kontrol etmek için RFD'ye bağlanın veya Simulasyonu başlatın.",
+    "mockHint": "Simulasyon modu — komutlar sanal drone'a uygulanır.",
+    "rfdHint": "Komutlar RFD downlink üzerinden gönderilir ('1' = AKTİF, '0' = PASİF)."
+  },
+  "droneTelemetry": {
+    "title": "Drone Telemetri",
+    "speed": "Drone Hızı",
+    "climbRate": "Tırmanma Hızı",
+    "relativeAltitude": "Bağıl Yükseklik",
+    "gForce": "G Kuvveti",
+    "course": "Drone Rotası"
+  },
   "dashboard": {
     "team": {
       "title": "Takim Paneli",
@@ -73,8 +103,19 @@
     "referee": {
       "title": "Hakem Paneli",
       "rocketGPS": "Roket GPS",
-      "payloadGPS": "Yuk GPS",
-      "scientificData": "Bilimsel Veri"
+      "payloadGPS": "Yük GPS",
+      "droneGPS": "Drone GPS",
+      "scientificData": "Bilimsel Veri",
+      "gpsTracking": "Üç Sistem GPS Konumlandırma",
+      "copyRocketCoords": "Roket GPS Koordinatlarını Kopyala",
+      "copyPayloadCoords": "Yük GPS Koordinatlarını Kopyala",
+      "copyDroneCoords": "Drone GPS Koordinatlarını Kopyala",
+      "separationVector": "Ayrılma Vektörü: {{distance}}m",
+      "gpsSatelliteLock": "GPS Uydu Kilidi: 3D Çoklu Takımyıldız",
+      "fixLocked": "KİLİT ALINDI",
+      "searching": "ARANIYOR",
+      "mapTitle": "Harita",
+      "rfdLink": "RFD Bağlantısı"
     }
   }
 }

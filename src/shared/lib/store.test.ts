@@ -149,6 +149,60 @@ describe("Mappers", () => {
     expect(mapped.flightState).toBe(FlightState.Powered);
     expect(mapped.primaryParachuteDeployed).toBe(false);
     expect(mapped.receivedAt).toBeGreaterThan(0);
+    // Non-drone packets default the flight-control fields
+    expect(mapped.armed).toBe(false);
+    expect(mapped.stateCode).toBe(0);
+    expect(mapped.throttleUs).toBe(0);
+  });
+
+  it("maps drone flight-control fields from raw packet", () => {
+    const raw = {
+      header: "CC",
+      timestamp_ms: 66000,
+      accel_x: 0.01,
+      accel_y: 0.01,
+      accel_z: 9.8,
+      gyro_x: 0.002,
+      gyro_y: 0.003,
+      gyro_z: 0.001,
+      mag_x: 11.2,
+      mag_y: -8.9,
+      mag_z: 41.5,
+      temp: 25.1,
+      pressure: 960.0,
+      humidity: 42.0,
+      altitude: 48.5,
+      aht_temp: 24.8,
+      aht_hum: 43.5,
+      latitude: 38.3695,
+      longitude: 34.0362,
+      gps_altitude: 48.5,
+      gps_speed: 3.5,
+      gps_course: 90.0,
+      roll: 1.2,
+      pitch: -0.8,
+      yaw: 180.0,
+      flight_state: "pad",
+      primary_parachute_deployed: false,
+      secondary_parachute_deployed: false,
+      rel_alt: 48.52,
+      vertical_velocity: -3.02,
+      g_force: 1.03,
+      dpdt: 0.36,
+      armed: true,
+      state_code: 2,
+      throttle_us: 2000,
+    };
+
+    const mapped = mapTelemetryPacket(raw);
+    expect(mapped.header).toBe("CC");
+    expect(mapped.relAlt).toBeCloseTo(48.52);
+    expect(mapped.verticalVelocity).toBeCloseTo(-3.02);
+    expect(mapped.gForce).toBeCloseTo(1.03);
+    expect(mapped.dpdt).toBeCloseTo(0.36);
+    expect(mapped.armed).toBe(true);
+    expect(mapped.stateCode).toBe(2);
+    expect(mapped.throttleUs).toBe(2000);
   });
 
   it("maps all flight states correctly", () => {
@@ -230,6 +284,13 @@ const sampleTelemetryPacket = {
   flightState: FlightState.Powered,
   primaryParachuteDeployed: false,
   secondaryParachuteDeployed: false,
+  relAlt: 0,
+  verticalVelocity: 0,
+  gForce: 0,
+  dpdt: 0,
+  armed: false,
+  stateCode: 0,
+  throttleUs: 0,
   receivedAt: Date.now(),
 };
 
@@ -344,6 +405,8 @@ describe("connectionSlice", () => {
       payload_packets_received: 210,
       drone_packets_received: 10,
       checksum_failures: 3,
+      uplink_acks: 2,
+      last_uplink_ack: true,
       uptime_ms: 60000,
     };
 
@@ -356,6 +419,8 @@ describe("connectionSlice", () => {
     expect(state.payloadPacketsReceived).toBe(210);
     expect(state.dronePacketsReceived).toBe(10);
     expect(state.checksumFailures).toBe(3);
+    expect(state.uplinkAcks).toBe(2);
+    expect(state.lastUplinkAck).toBe(true);
     expect(state.uptimeMs).toBe(60000);
     expect(state.isLoading).toBe(false);
   });
@@ -426,6 +491,8 @@ describe("Redux Store Integration", () => {
         payload_packets_received: 1,
         drone_packets_received: 1,
         checksum_failures: 0,
+        uplink_acks: 0,
+        last_uplink_ack: null,
         uptime_ms: 1000,
       }),
     );

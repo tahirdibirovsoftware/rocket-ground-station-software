@@ -69,7 +69,7 @@ export function RefereeDashboardPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", fontSize: "0.6875rem", fontFamily: "var(--font-mono)" }}>
             <Radio size={14} style={{ color: connectionMode === "disconnected" ? "var(--color-status-critical)" : "var(--color-status-nominal)" }} />
             <span style={{ color: "var(--color-text-secondary)" }}>
-              RFD Link: <strong style={{ color: connectionMode === "disconnected" ? "var(--color-status-critical)" : "var(--color-status-nominal)" }}>{connectionMode.toUpperCase()}</strong>
+              {t("dashboard.referee.rfdLink", "RFD Link")}: <strong style={{ color: connectionMode === "disconnected" ? "var(--color-status-critical)" : "var(--color-status-nominal)" }}>{connectionMode.toUpperCase()}</strong>
             </span>
           </div>
         </div>
