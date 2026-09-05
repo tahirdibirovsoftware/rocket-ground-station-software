@@ -215,6 +215,13 @@ impl CsvLogger {
                 format!("{:.2}", packet.altitude),
                 format!("{:.2}", packet.gps_speed),
                 format!("{:.1}", packet.gps_course),
+                format!("{:.2}", packet.rel_alt),
+                format!("{:.2}", packet.vertical_velocity),
+                format!("{:.3}", packet.g_force),
+                format!("{:.3}", packet.dpdt),
+                (packet.armed as u8).to_string(),
+                packet.state_code.to_string(),
+                packet.throttle_us.to_string(),
             ])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         writer
@@ -233,7 +240,7 @@ impl CsvLogger {
                 &format!("{:.2}", packet.altitude),
                 &format!("{:.6}", packet.latitude),
                 &format!("{:.6}", packet.longitude),
-                "",
+                &format!("{:.2}", packet.vertical_velocity),
                 "",
                 "",
                 "",
@@ -325,6 +332,13 @@ impl CsvLogger {
                         "altitude_m",
                         "speed_m_s",
                         "course_deg",
+                        "rel_alt_m",
+                        "vertical_velocity_m_s",
+                        "g_force_g",
+                        "dpdt_hpa_s",
+                        "armed",
+                        "state_code",
+                        "throttle_us",
                     ],
                     "unified" => &[
                         "source",

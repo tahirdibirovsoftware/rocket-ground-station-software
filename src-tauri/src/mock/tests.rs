@@ -312,6 +312,74 @@ fn mock_state_reset() {
 }
 
 #[test]
+fn mock_state_drone_arm_command() {
+    let state = MockState::new();
+    assert_eq!(state.drone_arm_command(), None);
+
+    state.set_drone_arm(true);
+    assert_eq!(state.drone_arm_command(), Some(true));
+
+    state.set_drone_arm(false);
+    assert_eq!(state.drone_arm_command(), Some(false));
+
+    state.reset();
+    assert_eq!(state.drone_arm_command(), None);
+}
+
+#[test]
+fn drone_arm_override_applied_to_generated_packets() {
+    use crate::protocol::telemetry_packet::TelemetryPacket;
+    use crate::serial::reader::{FrameParser, ParsedPacket};
+
+    let gen = MockGenerator::with_defaults();
+
+    // t=30s: without override the mock auto-arms (elapsed >= 5s)
+    let auto = gen.generate_tick_with_arm(150, None);
+    let auto_drone = auto
+        .iter()
+        .find_map(|p| match p {
+            MockPacket::Drone(b) => Some(b),
+            _ => None,
+        })
+        .expect("tick should contain drone packet");
+    let mut parser = FrameParser::new();
+    let parsed = parser.feed(auto_drone);
+    let auto_armed = match &parsed[0] {
+        ParsedPacket::Drone(p) => p.armed,
+        _ => panic!("expected drone packet"),
+    };
+    assert!(auto_armed, "mock should auto-arm after 5 s");
+
+    // Ground-commanded DISARM overrides the auto-arm
+    let disarmed = gen.generate_tick_with_arm(150, Some(false));
+    let disarmed_drone = disarmed
+        .iter()
+        .find_map(|p| match p {
+            MockPacket::Drone(b) => Some(b),
+            _ => None,
+        })
+        .expect("tick should contain drone packet");
+    let csv_str = std::str::from_utf8(disarmed_drone).unwrap();
+    let pkt = TelemetryPacket::parse(csv_str).expect("drone packet should parse");
+    assert!(!pkt.armed, "ground DISARM command should override auto-arm");
+    assert_eq!(pkt.state_code, 0);
+    assert_eq!(pkt.throttle_us, 1000);
+
+    // Ground-commanded ARM before the auto-arm window
+    let armed = gen.generate_tick_with_arm(5, Some(true));
+    let armed_drone = armed
+        .iter()
+        .find_map(|p| match p {
+            MockPacket::Drone(b) => Some(b),
+            _ => None,
+        })
+        .expect("tick should contain drone packet");
+    let csv_str = std::str::from_utf8(armed_drone).unwrap();
+    let pkt = TelemetryPacket::parse(csv_str).expect("drone packet should parse");
+    assert!(pkt.armed, "ground ARM command should override auto-disarm");
+}
+
+#[test]
 fn full_flight_simulation_all_packets_valid() {
     let gen = MockGenerator::with_defaults();
     let mut parser = FrameParser::new();

@@ -181,3 +181,98 @@ fn mock_generated_packets_parse_through_frame_parser() {
     assert_eq!(parser.stats.payload_packets, 50);
     assert_eq!(parser.stats.drone_packets, 50);
 }
+
+/// Real Teensy drone (CC) line with the 7 flight-control extension fields.
+fn valid_drone_bytes() -> Vec<u8> {
+    "CC,66000,0.01,0.01,9.8,0.002,0.003,0.001,11.2,-8.9,41.5,25.1,960.0,42.0,48.5,24.8,43.5,38.3695,34.0362,48.5,3.5,90.0,1.2,-0.8,180.0,48.52,-3.02,1.03,0.36,1,2,2000\n"
+        .as_bytes()
+        .to_vec()
+}
+
+#[test]
+fn parse_drone_packet_with_flight_control_fields() {
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(&valid_drone_bytes());
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Drone(pkt) => {
+            assert_eq!(pkt.header, "CC");
+            assert!((pkt.rel_alt - 48.52).abs() < 0.001);
+            assert!((pkt.vertical_velocity - -3.02).abs() < 0.001);
+            assert!((pkt.g_force - 1.03).abs() < 0.001);
+            assert!((pkt.dpdt - 0.36).abs() < 0.001);
+            assert!(pkt.armed);
+            assert_eq!(pkt.state_code, 2);
+            assert_eq!(pkt.throttle_us, 2000);
+        }
+        other => panic!("expected drone packet, got {other:?}"),
+    }
+    assert_eq!(parser.stats.drone_packets, 1);
+}
+
+#[test]
+fn parse_drone_packet_with_sensor_off_placeholders() {
+    // IMU/GPS off → "N" placeholders; flight-control fields still present
+    let line = "CC,67000,N,N,N,N,N,N,N,N,N,25.1,960.0,42.0,48.5,24.8,43.5,N,N,N,N,N,0.0,0.0,0.0,48.50,0.00,1.00,0.00,0,0,1000\n";
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(line.as_bytes());
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Drone(pkt) => {
+            assert_eq!(pkt.accel_x, 0.0);
+            assert_eq!(pkt.latitude, 0.0);
+            assert!(!pkt.armed);
+            assert_eq!(pkt.state_code, 0);
+            assert_eq!(pkt.throttle_us, 1000);
+        }
+        other => panic!("expected drone packet, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_uplink_arm_ack_line() {
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(b"1\n");
+
+    assert!(packets.is_empty());
+    assert_eq!(parser.stats.uplink_acks, 1);
+    assert_eq!(parser.stats.last_uplink_ack, Some(true));
+}
+
+#[test]
+fn parse_uplink_disarm_ack_line() {
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(b"0\n");
+
+    assert!(packets.is_empty());
+    assert_eq!(parser.stats.uplink_acks, 1);
+    assert_eq!(parser.stats.last_uplink_ack, Some(false));
+}
+
+#[test]
+fn uplink_acks_interleaved_with_telemetry() {
+    let mut parser = FrameParser::new();
+    let mut bytes = valid_rocket_bytes();
+    bytes.extend_from_slice(b"1\n");
+    bytes.extend_from_slice(&valid_drone_bytes());
+
+    let packets = parser.feed(&bytes);
+
+    assert_eq!(packets.len(), 2);
+    assert!(matches!(packets[0], ParsedPacket::Rocket(_)));
+    assert!(matches!(packets[1], ParsedPacket::Drone(_)));
+    assert_eq!(parser.stats.uplink_acks, 1);
+    assert_eq!(parser.stats.last_uplink_ack, Some(true));
+}
+
+#[test]
+fn non_ack_short_lines_not_counted() {
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(b"2\nAB\n!\n");
+
+    assert!(packets.is_empty());
+    assert_eq!(parser.stats.uplink_acks, 0);
+    assert_eq!(parser.stats.last_uplink_ack, None);
+}

@@ -28,6 +28,10 @@ pub struct MockState {
     pub running: AtomicBool,
     /// Elapsed time in milliseconds since mock started.
     pub elapsed_ms: AtomicU64,
+    /// Ground-station commanded drone arm state (true = ARM).
+    pub drone_armed: AtomicBool,
+    /// Whether the ground station has sent a drone arm command.
+    pub drone_arm_override: AtomicBool,
 }
 
 impl MockState {
@@ -35,6 +39,8 @@ impl MockState {
         Self {
             running: AtomicBool::new(false),
             elapsed_ms: AtomicU64::new(0),
+            drone_armed: AtomicBool::new(false),
+            drone_arm_override: AtomicBool::new(false),
         }
     }
 
@@ -53,6 +59,8 @@ impl MockState {
     pub fn reset(&self) {
         self.stop();
         self.elapsed_ms.store(0, Ordering::Relaxed);
+        self.drone_armed.store(false, Ordering::Relaxed);
+        self.drone_arm_override.store(false, Ordering::Relaxed);
     }
 
     pub fn get_elapsed_ms(&self) -> u64 {
@@ -61,6 +69,21 @@ impl MockState {
 
     pub fn set_elapsed_ms(&self, ms: u64) {
         self.elapsed_ms.store(ms, Ordering::Relaxed);
+    }
+
+    /// Command the mock drone engine: true = ARM ('1'), false = DISARM ('0').
+    pub fn set_drone_arm(&self, armed: bool) {
+        self.drone_armed.store(armed, Ordering::Relaxed);
+        self.drone_arm_override.store(true, Ordering::Relaxed);
+    }
+
+    /// Returns the ground-commanded arm state, or `None` when no command was sent yet.
+    pub fn drone_arm_command(&self) -> Option<bool> {
+        if self.drone_arm_override.load(Ordering::Relaxed) {
+            Some(self.drone_armed.load(Ordering::Relaxed))
+        } else {
+            None
+        }
     }
 }
 
@@ -134,6 +157,13 @@ impl MockGenerator {
             flight_state: state,
             primary_parachute_deployed: matches!(state, FlightState::PrimaryChute | FlightState::SecondaryChute),
             secondary_parachute_deployed: matches!(state, FlightState::SecondaryChute),
+            rel_alt: 0.0,
+            vertical_velocity: 0.0,
+            g_force: 0.0,
+            dpdt: 0.0,
+            armed: false,
+            state_code: 0,
+            throttle_us: 0,
         };
         
         let csv_str = packet.to_csv_string();
@@ -181,6 +211,13 @@ impl MockGenerator {
             flight_state: FlightState::Pad,
             primary_parachute_deployed: false,
             secondary_parachute_deployed: false,
+            rel_alt: 0.0,
+            vertical_velocity: 0.0,
+            g_force: 0.0,
+            dpdt: 0.0,
+            armed: false,
+            state_code: 0,
+            throttle_us: 0,
         };
         
         let csv_str = packet.to_csv_string();
@@ -189,6 +226,15 @@ impl MockGenerator {
 
     /// Generate simulated Drone telemetry in ASCII CSV format.
     pub fn generate_drone_bytes(&self, elapsed_s: f32) -> Option<MockPacket> {
+        self.generate_drone_bytes_with_arm(elapsed_s, None)
+    }
+
+    /// Generate simulated Drone telemetry with an optional ground-commanded arm override.
+    pub fn generate_drone_bytes_with_arm(
+        &self,
+        elapsed_s: f32,
+        arm_override: Option<bool>,
+    ) -> Option<MockPacket> {
         if elapsed_s > self.config.timings.flight_end {
             return None;
         }
@@ -201,6 +247,28 @@ impl MockGenerator {
         } else {
             (50.0 - (elapsed_s - 150.0) * 3.0).max(0.0)
         };
+
+        // Drone flight-control simulation (mirrors Teensy flight_ctrl state machine):
+        // DISARMED → ARMED → MOTORS_ON (descending && alt <= 500 m)
+        let vertical_velocity: f32 = if elapsed_s < 10.0 {
+            5.0
+        } else if elapsed_s < 150.0 {
+            0.0
+        } else {
+            -3.0
+        };
+        let armed = arm_override.unwrap_or(elapsed_s >= 5.0);
+        let motors_on = armed && vertical_velocity < 0.0 && alt <= 500.0;
+        let state_code = if !armed {
+            0
+        } else if motors_on {
+            2
+        } else {
+            1
+        };
+        let throttle_us = if motors_on { 2000u16 } else { 1000u16 };
+        let g_force = 1.0 + vertical_velocity.abs() * 0.01;
+        let dpdt = -vertical_velocity * 0.12; // approx hPa/s at low altitude
 
         let (lat, lon) = gps_at(elapsed_s, self.config.launch_lat, self.config.launch_lon);
         let drone_lat = lat - 0.0003;
@@ -236,6 +304,13 @@ impl MockGenerator {
             flight_state: FlightState::Pad,
             primary_parachute_deployed: false,
             secondary_parachute_deployed: false,
+            rel_alt: alt,
+            vertical_velocity,
+            g_force,
+            dpdt,
+            armed,
+            state_code,
+            throttle_us,
         };
 
         let csv_str = packet.to_csv_string();
@@ -244,6 +319,15 @@ impl MockGenerator {
 
     /// Generate all packets for a tick.
     pub fn generate_tick(&self, tick_index: u64) -> Vec<MockPacket> {
+        self.generate_tick_with_arm(tick_index, None)
+    }
+
+    /// Generate all packets for a tick with an optional drone arm override.
+    pub fn generate_tick_with_arm(
+        &self,
+        tick_index: u64,
+        drone_arm: Option<bool>,
+    ) -> Vec<MockPacket> {
         let elapsed_s = tick_index as f32 * 0.2;
         let mut packets = Vec::new();
 
@@ -257,7 +341,7 @@ impl MockGenerator {
             packets.push(p);
         }
 
-        if let Some(d) = self.generate_drone_bytes(elapsed_s) {
+        if let Some(d) = self.generate_drone_bytes_with_arm(elapsed_s, drone_arm) {
             packets.push(d);
         }
 

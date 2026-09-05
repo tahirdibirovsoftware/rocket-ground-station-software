@@ -44,6 +44,13 @@ fn sample_packet(header: &str) -> TelemetryPacket {
         flight_state: FlightState::Powered,
         primary_parachute_deployed: false,
         secondary_parachute_deployed: false,
+        rel_alt: 50.0,
+        vertical_velocity: -3.0,
+        g_force: 1.03,
+        dpdt: 0.36,
+        armed: true,
+        state_code: 2,
+        throttle_us: 2000,
     }
 }
 
@@ -186,6 +193,13 @@ fn rocket_csv_data_integrity() {
         flight_state: FlightState::PrimaryChute,
         primary_parachute_deployed: true,
         secondary_parachute_deployed: false,
+        rel_alt: 0.0,
+        vertical_velocity: 0.0,
+        g_force: 0.0,
+        dpdt: 0.0,
+        armed: false,
+        state_code: 0,
+        throttle_us: 0,
     };
 
     logger.write_rocket(&pkt).unwrap();
