@@ -1,6 +1,15 @@
 import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Mountain, Zap, Gauge, Activity, Radio } from "lucide-react";
+import {
+  Mountain,
+  Zap,
+  Gauge,
+  Activity,
+  Radio,
+  ArrowUpRight,
+  ArrowDown,
+  Compass,
+} from "lucide-react";
 import { ConnectionPanel } from "@widgets/connection-panel";
 import { AvionicsSummary } from "@widgets/avionics-summary";
 import { PayloadSummary } from "@widgets/payload-summary";
@@ -17,19 +26,26 @@ import {
   selectRocketVelocityHistory,
   selectRocketPressureHistory,
   selectRocketPacketCount,
+  selectLatestRocketPacket,
 } from "@entities/rocket-packet";
 import {
   selectDroneAltitudeHistory,
   selectDroneVelocityHistory,
   selectDronePressureHistory,
   selectDronePacketCount,
+  selectDroneStatus,
 } from "@entities/drone-packet";
 import {
   selectPayloadAltitudeHistory,
   selectPayloadVelocityHistory,
   selectPayloadGForceHistory,
   selectPayloadPacketCount,
+  selectPayloadStatus,
 } from "@entities/payload-packet";
+import {
+  resolveMissionStream,
+  type StreamSourceMode,
+} from "@shared/lib";
 
 /** Rocket charts panel - isolated subscriptions */
 const RocketCharts = React.memo(function RocketCharts() {
@@ -191,18 +207,34 @@ export function TeamDashboardPage() {
   const rocketCount = useAppSelector(selectRocketPacketCount);
   const payloadCount = useAppSelector(selectPayloadPacketCount);
   const droneCount = useAppSelector(selectDronePacketCount);
+  const latestRocket = useAppSelector(selectLatestRocketPacket);
+  const droneStatus = useAppSelector(selectDroneStatus);
+  const payloadStatus = useAppSelector(selectPayloadStatus);
 
-  const [streamSource, setStreamSource] = useState<"auto" | "rocket" | "payload" | "drone">("auto");
+  const [streamSource, setStreamSource] = useState<StreamSourceMode>("auto");
 
-  // Determine which stream to graph: auto-prioritizes active streams
-  const activeStream = useMemo<"rocket" | "payload" | "drone">(() => {
-    if (streamSource !== "auto") return streamSource;
-    if (rocketCount > 0) return "rocket";
-    if (payloadCount > 0) return "payload";
-    if (droneCount > 0) return "drone";
-    return "rocket";
-  }, [streamSource, rocketCount, payloadCount, droneCount]);
-
+  // Dynamically resolve active telemetry stream based on flight mission phase
+  const { activeStream, missionStage } = useMemo(
+    () =>
+      resolveMissionStream({
+        streamSource,
+        rocketCount,
+        payloadCount,
+        droneCount,
+        latestRocket,
+        droneStatus,
+        payloadStatus,
+      }),
+    [
+      streamSource,
+      rocketCount,
+      payloadCount,
+      droneCount,
+      latestRocket,
+      droneStatus,
+      payloadStatus,
+    ]
+  );
 
   return (
     <div
@@ -293,9 +325,59 @@ export function TeamDashboardPage() {
               }}
             >
               <Radio size={12} style={{ color: "var(--color-status-nominal)" }} />
-              <span style={{ fontWeight: 600 }}>CHART STREAM:</span>
-              <span style={{ color: "var(--color-status-info)", fontWeight: 700 }}>
-                {activeStream.toUpperCase()} {streamSource === "auto" ? "(AUTO)" : ""}
+              <span style={{ fontWeight: 600 }}>
+                {t("dashboard.team.chartStream", "CHART STREAM")}:
+              </span>
+              <span
+                style={{
+                  color: "var(--color-status-info)",
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                <span>{activeStream.toUpperCase()}</span>
+                {streamSource === "auto" && (
+                  <span
+                    style={{
+                      padding: "0.05rem 0.35rem",
+                      fontSize: "0.5625rem",
+                      fontWeight: 800,
+                      borderRadius: "0.2rem",
+                      backgroundColor:
+                        missionStage === "descent"
+                          ? "rgba(0, 255, 136, 0.15)"
+                          : missionStage === "ascent"
+                          ? "rgba(255, 170, 0, 0.15)"
+                          : "rgba(0, 200, 255, 0.15)",
+                      color:
+                        missionStage === "descent"
+                          ? "var(--color-status-nominal)"
+                          : missionStage === "ascent"
+                          ? "var(--color-status-warning)"
+                          : "var(--color-status-info)",
+                      border:
+                        missionStage === "descent"
+                          ? "1px solid rgba(0, 255, 136, 0.3)"
+                          : missionStage === "ascent"
+                          ? "1px solid rgba(255, 170, 0, 0.3)"
+                          : "1px solid rgba(0, 200, 255, 0.3)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {missionStage === "ascent" && <ArrowUpRight size={10} />}
+                    {missionStage === "descent" && <ArrowDown size={10} />}
+                    {missionStage === "standby" && <Compass size={10} />}
+                    {t(
+                      `dashboard.team.stage.${missionStage}`,
+                      `AUTO: ${missionStage.toUpperCase()}`
+                    )}
+                  </span>
+                )}
               </span>
             </div>
 

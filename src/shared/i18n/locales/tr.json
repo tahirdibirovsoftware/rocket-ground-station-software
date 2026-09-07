@@ -137,6 +137,12 @@
     "fastG": "Hızlı-G Filtresi",
     "outputs": "Aktüatör Çıkışı"
   },
+  "chartStream": {
+    "auto": "OTO",
+    "rocket": "ROKET (AA)",
+    "payload": "FAYDALI YÜK (BB)",
+    "drone": "DRONE (CC)"
+  },
   "dashboard": {
     "team": {
       "title": "Takim Paneli",
@@ -147,7 +153,20 @@
       "cameraScanning": "Cihazlar Taranıyor...",
       "cameraDisconnected": "Kamera Bağlı Değil",
       "cameraHint": "Yayını başlatmak için harici bir USB faydalı yük/roket kamerası bağlayın.",
-      "cameraRescan": "Kamera cihazlarını yeniden tara"
+      "cameraRescan": "Kamera cihazlarını yeniden tara",
+      "chartStream": "GRAFİK AKIŞI",
+      "streamAuto": "OTO",
+      "streamRocket": "ROKET (AA)",
+      "streamPayload": "FAYDALI YÜK (BB)",
+      "streamDrone": "DRONE (CC)",
+      "stage": {
+        "standby": "OTO: BEKLEMEDE",
+        "ascent": "OTO: TIRMANMA",
+        "apogee": "OTO: TEPE NOKTASI",
+        "descent": "OTO: İNİŞ / AYRILMA",
+        "touchdown": "OTO: İNİŞ TAMAM",
+        "manual": "MANUEL KİLİT"
+      }
     },
     "referee": {
       "title": "Hakem Paneli",

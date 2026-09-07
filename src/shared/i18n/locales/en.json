@@ -137,6 +137,12 @@
     "fastG": "Fast-G Filter",
     "outputs": "Actuator Output"
   },
+  "chartStream": {
+    "auto": "AUTO",
+    "rocket": "ROCKET (AA)",
+    "payload": "PAYLOAD (BB)",
+    "drone": "DRONE (CC)"
+  },
   "dashboard": {
     "team": {
       "title": "Team Dashboard",
@@ -147,7 +153,20 @@
       "cameraScanning": "Scanning Devices...",
       "cameraDisconnected": "Camera Disconnected",
       "cameraHint": "Connect an external USB payload/rocket camera to start the feed.",
-      "cameraRescan": "Rescan camera devices"
+      "cameraRescan": "Rescan camera devices",
+      "chartStream": "CHART STREAM",
+      "streamAuto": "AUTO",
+      "streamRocket": "ROCKET (AA)",
+      "streamPayload": "PAYLOAD (BB)",
+      "streamDrone": "DRONE (CC)",
+      "stage": {
+        "standby": "AUTO: STANDBY",
+        "ascent": "AUTO: ASCENT",
+        "apogee": "AUTO: APOGEE",
+        "descent": "AUTO: DESCENT",
+        "touchdown": "AUTO: TOUCHDOWN",
+        "manual": "MANUAL LOCK"
+      }
     },
     "referee": {
       "title": "Referee Dashboard",
