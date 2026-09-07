@@ -28,10 +28,14 @@ interface TelemetryChartProps {
   color?: string;
   /** Y-axis unit label. */
   unit?: string;
-  /** Canvas height in pixels. */
+  /** Canvas height in pixels. Ignored when `flex` is set. */
   height?: number;
   /** HTML id. */
   id?: string;
+  /** Flex layout: panel grows to fill available space. */
+  flex?: boolean;
+  /** Minimum canvas height when flexing. */
+  minHeight?: number;
 }
 
 function drawChart(
@@ -46,6 +50,7 @@ function drawChart(
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.width / dpr;
   const h = canvas.height / dpr;
+  if (w <= 0 || h <= 0) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
@@ -173,49 +178,81 @@ export const TelemetryChart = React.memo(function TelemetryChart({
   unit = "",
   height = 180,
   id,
+  flex = false,
+  minHeight = 80,
 }: TelemetryChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
-  const render = useCallback(() => {
-    if (canvasRef.current) {
-      drawChart(canvasRef.current, data, color, unit);
-    }
-  }, [data, color, unit]);
+  const colorRef = useRef(color);
+  colorRef.current = color;
 
+  const unitRef = useRef(unit);
+  unitRef.current = unit;
+
+  // Request redraw via requestAnimationFrame (max 1 paint per screen refresh)
+  const requestDraw = useCallback(() => {
+    if (rafIdRef.current !== null) return;
+
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      drawChart(canvas, dataRef.current, colorRef.current, unitRef.current);
+    });
+  }, []);
+
+  // ResizeObserver: measures canvas bounds asynchronously without forced reflow
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    render();
-  }, [render]);
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width <= 0 || height <= 0) continue;
+        const dpr = window.devicePixelRatio || 1;
+        const targetW = Math.round(width * dpr);
+        const targetH = Math.round(height * dpr);
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+          requestDraw();
+        }
+      }
+    });
 
-  // Re-render on resize
-  useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      render();
+    resizeObserver.observe(canvas);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
+  }, [requestDraw]);
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [render]);
+  // Request redraw on data updates
+  useEffect(() => {
+    requestDraw();
+  }, [data, color, unit, requestDraw]);
 
   return (
-    <PanelContainer id={id} title={title} icon={icon}>
+    <PanelContainer
+      id={id}
+      title={title}
+      icon={icon}
+      style={flex ? { flex: 1, minHeight: 0 } : undefined}
+    >
       <canvas
         ref={canvasRef}
         style={{
           width: "100%",
-          height,
+          height: flex ? "100%" : height,
+          minHeight: flex ? minHeight : undefined,
           borderRadius: "0.25rem",
           display: "block",
         }}

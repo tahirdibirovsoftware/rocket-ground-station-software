@@ -64,8 +64,9 @@ pub struct AppState {
     pub rfd_cancel: Arc<std::sync::atomic::AtomicBool>,
     /// Handle to cancel the Mock data loop.
     pub mock_cancel: Arc<std::sync::atomic::AtomicBool>,
-    /// Shared RFD serial writer (for downlink commands such as drone ARM/DISARM).
-    pub rfd_writer: Mutex<Option<Arc<Mutex<Box<dyn serialport::SerialPort>>>>>,
+    /// Independent RFD serial writer clone (for downlink commands such as
+    /// drone ARM/DISARM) — never shared with the reader thread.
+    pub rfd_writer: Mutex<Option<Box<dyn serialport::SerialPort>>>,
     /// Native camera streaming state.
     pub camera_state: crate::camera::CameraState,
 }

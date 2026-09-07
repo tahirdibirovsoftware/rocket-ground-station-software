@@ -12,6 +12,7 @@ pub mod checksum;
 pub mod payload_packet;
 pub mod rocket_packet;
 pub mod telemetry_packet;
+pub mod binary_packet;
 
 #[cfg(test)]
 mod tests;

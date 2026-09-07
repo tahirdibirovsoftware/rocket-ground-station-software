@@ -51,6 +51,12 @@ fn sample_packet(header: &str) -> TelemetryPacket {
         armed: true,
         state_code: 2,
         throttle_us: 2000,
+        on_ground: false,
+        flight_phase: 1,
+        fast_g: 1.03,
+        outputs_active: true,
+        bno_calib: 0,
+        flags: 0,
     }
 }
 
@@ -90,6 +96,51 @@ fn write_single_drone_packet() {
     let content = fs::read_to_string(logger.drone_file_path()).unwrap();
     assert!(content.contains("timestamp_ms"));
     assert!(content.contains("5000"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn drone_csv_has_correct_firmware_headers_and_fields() {
+    let (mut logger, dir) = temp_logger("drone_headers");
+    let mut pkt = sample_packet("CC");
+    pkt.fast_g = 1.45;
+    pkt.flight_phase = 1;
+    pkt.outputs_active = true;
+    logger.write_drone(&pkt).unwrap();
+
+    let content = fs::read_to_string(logger.drone_file_path()).unwrap();
+    let header_line = content.lines().next().unwrap();
+    assert!(header_line.contains("fast_g_g"));
+    assert!(header_line.contains("flight_phase"));
+    assert!(header_line.contains("outputs_active"));
+
+    let data_line = content.lines().nth(1).unwrap();
+    assert!(data_line.contains("1.450"));
+    assert!(data_line.contains(",1,1")); // flight_phase=1, outputs_active=1
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn payload_csv_has_correct_firmware_headers_and_fields() {
+    let (mut logger, dir) = temp_logger("payload_headers");
+    let mut pkt = sample_packet("BB");
+    pkt.fast_g = 1.05;
+    pkt.flight_phase = 2;
+    pkt.outputs_active = true;
+    pkt.on_ground = true;
+    logger.write_payload(&pkt).unwrap();
+
+    let content = fs::read_to_string(logger.payload_file_path()).unwrap();
+    let header_line = content.lines().next().unwrap();
+    assert!(header_line.contains("fast_g_g"));
+    assert!(header_line.contains("flight_phase"));
+    assert!(header_line.contains("outputs_active"));
+
+    let data_line = content.lines().nth(1).unwrap();
+    assert!(data_line.contains("1.050"));
+    assert!(data_line.contains(",1,2,1.050,1")); // on_ground=1, flight_phase=2, fast_g_g=1.050, outputs_active=1
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -200,6 +251,12 @@ fn rocket_csv_data_integrity() {
         armed: false,
         state_code: 0,
         throttle_us: 0,
+        on_ground: false,
+        flight_phase: 0,
+        fast_g: 0.0,
+        outputs_active: false,
+        bno_calib: 0,
+        flags: 0,
     };
 
     logger.write_rocket(&pkt).unwrap();
@@ -236,6 +293,8 @@ fn mock_to_parser_to_csv_pipeline() {
                     ParsedPacket::Rocket(r) => logger.write_rocket(&r).unwrap(),
                     ParsedPacket::Payload(p) => logger.write_payload(&p).unwrap(),
                     ParsedPacket::Drone(d) => logger.write_drone(&d).unwrap(),
+                    ParsedPacket::PayloadStatus { .. } => {}
+                    ParsedPacket::DroneStatus { .. } => {}
                 }
             }
         }

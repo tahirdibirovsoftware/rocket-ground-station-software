@@ -1,5 +1,4 @@
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, State, Manager};
 
@@ -49,12 +48,14 @@ pub async fn connect_rfd(
             }
 
             state.rfd_cancel.store(false, Ordering::Relaxed);
-            let port_arc = Arc::new(Mutex::new(serial_port));
+            let writer_port = serial_port
+                .try_clone()
+                .map_err(|e| format!("Failed to clone RFD port for downlink: {e}"))?;
             {
                 let mut writer = state.rfd_writer.lock().unwrap();
-                *writer = Some(port_arc.clone());
+                *writer = Some(writer_port);
             }
-            spawn_serial_reader_loop(app.clone(), state.rfd_cancel.clone(), port_arc);
+            spawn_serial_reader_loop(app.clone(), state.rfd_cancel.clone(), serial_port);
 
             let session_dir = {
                 let mut logger = state.csv_logger.lock().unwrap();
@@ -108,11 +109,11 @@ pub fn disconnect_rfd(
 
 /// Command the drone engine over the RFD downlink.
 ///
-/// Sends a single ASCII byte over the connected RFD serial port:
-/// '1' = ARM (engine ON), '0' = DISARM (engine OFF).
+/// Sends a newline-terminated text command over the connected RFD serial port:
+/// "ARM_ON" = ARM (engine ON), "ARM_OFF" = DISARM (engine OFF).
 /// In Mock mode the command is applied to the simulated drone instead.
 #[tauri::command]
-pub fn set_drone_engine(
+pub async fn set_drone_engine(
     state: State<'_, AppState>,
     enabled: bool,
 ) -> Result<String, String> {
@@ -122,23 +123,21 @@ pub fn set_drone_engine(
 
     match mode {
         ConnectionMode::Serial => {
-            let writer = state.rfd_writer.lock().unwrap();
-            let port_arc = writer
-                .as_ref()
+            let mut writer = state.rfd_writer.lock().unwrap();
+            let port = writer
+                .as_mut()
                 .ok_or_else(|| "RFD serial writer unavailable".to_string())?;
-            let mut port = port_arc
-                .lock()
-                .map_err(|_| "RFD serial writer lock poisoned".to_string())?;
 
-            let cmd: [u8; 1] = if enabled { [b'1'] } else { [b'0'] };
-            port.write_all(&cmd)
+            let cmd: &[u8] = if enabled { b"ARM_ON\n" } else { b"ARM_OFF\n" };
+            port.write_all(cmd)
                 .map_err(|e| format!("Failed to send drone command: {e}"))?;
             port.flush()
                 .map_err(|e| format!("Failed to flush RFD serial: {e}"))?;
+            drop(writer);
 
             log::info!(
                 "Sent drone engine command: {}",
-                if enabled { "ARM (1)" } else { "DISARM (0)" }
+                if enabled { "ARM_ON" } else { "ARM_OFF" }
             );
             Ok(format!(
                 "Drone engine {}",
@@ -149,7 +148,7 @@ pub fn set_drone_engine(
             state.mock_state.set_drone_arm(enabled);
             log::info!(
                 "Mock drone engine command: {}",
-                if enabled { "ARM (1)" } else { "DISARM (0)" }
+                if enabled { "ARM_ON" } else { "ARM_OFF" }
             );
             Ok(format!(
                 "Mock drone engine {}",
@@ -165,7 +164,7 @@ pub fn set_drone_engine(
 fn spawn_serial_reader_loop(
     app_handle: AppHandle,
     cancel_token: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    port: std::sync::Arc<std::sync::Mutex<Box<dyn serialport::SerialPort>>>,
+    mut port: Box<dyn serialport::SerialPort>,
 ) {
     use tauri::Manager;
     std::thread::spawn(move || {
@@ -175,10 +174,7 @@ fn spawn_serial_reader_loop(
         log::info!("Hardware reader loop started");
 
         while !cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
-            let read_result = {
-                let mut port_guard = port.lock().unwrap();
-                port_guard.read(&mut buffer)
-            };
+            let read_result = port.read(&mut buffer);
 
             match read_result {
                 Ok(n) if n > 0 => {
@@ -225,6 +221,25 @@ fn spawn_serial_reader_loop(
                                             log::error!("Failed to write drone log: {e}");
                                         }
                                     }
+                                }
+                                ParsedPacket::PayloadStatus {
+                                    on_ground,
+                                    flight_phase,
+                                    outputs_active,
+                                } => {
+                                    emit_payload_status(
+                                        &app_handle,
+                                        on_ground,
+                                        flight_phase,
+                                        outputs_active,
+                                    );
+                                }
+                                ParsedPacket::DroneStatus {
+                                    state_code,
+                                    throttle_us,
+                                    armed,
+                                } => {
+                                    emit_drone_status(&app_handle, state_code, throttle_us, armed);
                                 }
                             }
                         }
@@ -359,6 +374,25 @@ pub async fn start_mock(
                                     log::error!("Failed to write drone log: {e}");
                                 }
                             }
+                        }
+                        ParsedPacket::PayloadStatus {
+                            on_ground,
+                            flight_phase,
+                            outputs_active,
+                        } => {
+                            emit_payload_status(
+                                &app_handle,
+                                on_ground,
+                                flight_phase,
+                                outputs_active,
+                            );
+                        }
+                        ParsedPacket::DroneStatus {
+                            state_code,
+                            throttle_us,
+                            armed,
+                        } => {
+                            emit_drone_status(&app_handle, state_code, throttle_us, armed);
                         }
                     }
                 }

@@ -13,6 +13,12 @@ import { selectRocketGps } from "@entities/rocket-packet";
 import { selectPayloadGps } from "@entities/payload-packet";
 import { selectDroneGps } from "@entities/drone-packet";
 
+function isValidCoord(lat?: number | null, lng?: number | null): boolean {
+  if (typeof lat !== "number" || typeof lng !== "number") return false;
+  if (isNaN(lat) || isNaN(lng)) return false;
+  return Math.abs(lat) > 0.005 && Math.abs(lng) > 0.005 && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+}
+
 /** Haversine formula to compute distance in meters between 2 GPS points */
 function calculateDistanceMeters(
   lat1?: number,
@@ -22,21 +28,16 @@ function calculateDistanceMeters(
   lon2?: number,
   alt2?: number,
 ): number | null {
-  if (
-    typeof lat1 !== "number" ||
-    typeof lon1 !== "number" ||
-    typeof lat2 !== "number" ||
-    typeof lon2 !== "number"
-  ) {
+  if (!isValidCoord(lat1, lon1) || !isValidCoord(lat2, lon2)) {
     return null;
   }
   const R = 6371000; // Radius of Earth in meters
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const dLat = ((lat2! - lat1!) * Math.PI) / 180;
+  const dLon = ((lon2! - lon1!) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
+    Math.cos((lat1! * Math.PI) / 180) *
+      Math.cos((lat2! * Math.PI) / 180) *
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
@@ -71,6 +72,10 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 1500);
   };
+
+  const isRocketValid = isValidCoord(rocketGps?.lat, rocketGps?.lng);
+  const isPayloadValid = isValidCoord(payloadGps?.lat, payloadGps?.lng);
+  const isDroneValid = isValidCoord(droneGps?.lat, droneGps?.lng);
 
   return (
     <PanelContainer
@@ -148,15 +153,15 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
               </span>
               <button
                 onClick={() =>
-                  rocketGps?.lat &&
-                  copyToClipboard(`${rocketGps.lat}, ${rocketGps.lng}`, "rocket")
+                  isRocketValid &&
+                  copyToClipboard(`${rocketGps!.lat}, ${rocketGps!.lng}`, "rocket")
                 }
-                disabled={!rocketGps?.lat}
+                disabled={!isRocketValid}
                 style={{
                   background: "none",
                   border: "none",
                   color: "var(--color-text-muted)",
-                  cursor: "pointer",
+                  cursor: isRocketValid ? "pointer" : "default",
                   padding: "0.15rem",
                 }}
                 title={t("dashboard.referee.copyRocketCoords", "Copy Rocket GPS Coordinates")}
@@ -167,21 +172,25 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
 
             <TelemetryValue
               label={t("telemetry.latitude")}
-              value={rocketGps && typeof rocketGps.lat === "number" ? rocketGps.lat.toFixed(6) : "---"}
+              value={isRocketValid ? rocketGps!.lat.toFixed(6) : "---"}
               size="md"
             />
             <TelemetryValue
               label={t("telemetry.longitude")}
-              value={rocketGps && typeof rocketGps.lng === "number" ? rocketGps.lng.toFixed(6) : "---"}
+              value={isRocketValid ? rocketGps!.lng.toFixed(6) : "---"}
               size="md"
             />
             <TelemetryValue
-              label={t("telemetry.altitude")}
-              value={rocketGps && typeof rocketGps.alt === "number" ? rocketGps.alt.toFixed(1) : "---"}
+              label={t("telemetry.relativeAltitude", "Altitude (AGL)")}
+              value={isRocketValid && typeof rocketGps?.alt === "number" ? rocketGps.alt.toFixed(1) : "---"}
               unit={t("units.meters")}
               size="md"
               color="var(--color-status-critical)"
             />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.5625rem", fontFamily: "var(--font-mono)", color: "var(--color-text-muted)", marginTop: "-0.25rem" }}>
+              <span>{t("telemetry.mslAltitude", "MSL Alt")}:</span>
+              <span>{isRocketValid && typeof rocketGps?.gpsAlt === "number" && rocketGps.gpsAlt !== 0 ? `${rocketGps.gpsAlt.toFixed(1)}m` : "---"}</span>
+            </div>
           </div>
 
           {/* Payload GPS Card */}
@@ -211,15 +220,15 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
               </span>
               <button
                 onClick={() =>
-                  payloadGps?.lat &&
-                  copyToClipboard(`${payloadGps.lat}, ${payloadGps.lng}`, "payload")
+                  isPayloadValid &&
+                  copyToClipboard(`${payloadGps!.lat}, ${payloadGps!.lng}`, "payload")
                 }
-                disabled={!payloadGps?.lat}
+                disabled={!isPayloadValid}
                 style={{
                   background: "none",
                   border: "none",
                   color: "var(--color-text-muted)",
-                  cursor: "pointer",
+                  cursor: isPayloadValid ? "pointer" : "default",
                   padding: "0.15rem",
                 }}
                 title={t("dashboard.referee.copyPayloadCoords", "Copy Payload GPS Coordinates")}
@@ -230,21 +239,25 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
 
             <TelemetryValue
               label={t("telemetry.latitude")}
-              value={payloadGps && typeof payloadGps.lat === "number" ? payloadGps.lat.toFixed(6) : "---"}
+              value={isPayloadValid ? payloadGps!.lat.toFixed(6) : "---"}
               size="md"
             />
             <TelemetryValue
               label={t("telemetry.longitude")}
-              value={payloadGps && typeof payloadGps.lng === "number" ? payloadGps.lng.toFixed(6) : "---"}
+              value={isPayloadValid ? payloadGps!.lng.toFixed(6) : "---"}
               size="md"
             />
             <TelemetryValue
-              label={t("telemetry.altitude")}
-              value={payloadGps && typeof payloadGps.alt === "number" ? payloadGps.alt.toFixed(1) : "---"}
+              label={t("telemetry.relativeAltitude", "Altitude (AGL)")}
+              value={isPayloadValid && typeof payloadGps?.alt === "number" ? payloadGps.alt.toFixed(1) : "---"}
               unit={t("units.meters")}
               size="md"
               color="var(--color-status-info)"
             />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.5625rem", fontFamily: "var(--font-mono)", color: "var(--color-text-muted)", marginTop: "-0.25rem" }}>
+              <span>{t("telemetry.mslAltitude", "MSL Alt")}:</span>
+              <span>{isPayloadValid && typeof payloadGps?.gpsAlt === "number" && payloadGps.gpsAlt !== 0 ? `${payloadGps.gpsAlt.toFixed(1)}m` : "---"}</span>
+            </div>
           </div>
 
           {/* Drone GPS Card */}
@@ -274,15 +287,15 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
               </span>
               <button
                 onClick={() =>
-                  droneGps?.lat &&
-                  copyToClipboard(`${droneGps.lat}, ${droneGps.lng}`, "drone")
+                  isDroneValid &&
+                  copyToClipboard(`${droneGps!.lat}, ${droneGps!.lng}`, "drone")
                 }
-                disabled={!droneGps?.lat}
+                disabled={!isDroneValid}
                 style={{
                   background: "none",
                   border: "none",
                   color: "var(--color-text-muted)",
-                  cursor: "pointer",
+                  cursor: isDroneValid ? "pointer" : "default",
                   padding: "0.15rem",
                 }}
                 title={t("dashboard.referee.copyDroneCoords", "Copy Drone GPS Coordinates")}
@@ -293,21 +306,25 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
 
             <TelemetryValue
               label={t("telemetry.latitude")}
-              value={droneGps && typeof droneGps.lat === "number" ? droneGps.lat.toFixed(6) : "---"}
+              value={isDroneValid ? droneGps!.lat.toFixed(6) : "---"}
               size="md"
             />
             <TelemetryValue
               label={t("telemetry.longitude")}
-              value={droneGps && typeof droneGps.lng === "number" ? droneGps.lng.toFixed(6) : "---"}
+              value={isDroneValid ? droneGps!.lng.toFixed(6) : "---"}
               size="md"
             />
             <TelemetryValue
-              label={t("telemetry.altitude")}
-              value={droneGps && typeof droneGps.alt === "number" ? droneGps.alt.toFixed(1) : "---"}
+              label={t("telemetry.relativeAltitude", "Altitude (AGL)")}
+              value={isDroneValid && typeof droneGps?.alt === "number" ? droneGps.alt.toFixed(1) : "---"}
               unit={t("units.meters")}
               size="md"
               color="var(--color-status-nominal)"
             />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.5625rem", fontFamily: "var(--font-mono)", color: "var(--color-text-muted)", marginTop: "-0.25rem" }}>
+              <span>{t("telemetry.mslAltitude", "MSL Alt")}:</span>
+              <span>{isDroneValid && typeof droneGps?.gpsAlt === "number" && droneGps.gpsAlt !== 0 ? `${droneGps.gpsAlt.toFixed(1)}m` : "---"}</span>
+            </div>
           </div>
         </div>
 
@@ -330,8 +347,8 @@ export const DualGpsPanel = React.memo(function DualGpsPanel() {
             <Radio size={12} style={{ color: "var(--color-status-nominal)" }} />
             <span>{t("dashboard.referee.gpsSatelliteLock", "GPS Satellite Lock: 3D Multi-Constellation")}</span>
           </div>
-          <span style={{ color: "var(--color-status-nominal)", fontWeight: 700 }}>
-            {rocketGps?.lat
+          <span style={{ color: isRocketValid || isPayloadValid || isDroneValid ? "var(--color-status-nominal)" : "var(--color-status-warning)", fontWeight: 700 }}>
+            {isRocketValid || isPayloadValid || isDroneValid
               ? t("dashboard.referee.fixLocked", "FIX LOCKED")
               : t("dashboard.referee.searching", "SEARCHING")}
           </span>

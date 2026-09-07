@@ -4,7 +4,7 @@
 import type { TelemetryPacket } from "@shared/types";
 import { FlightState } from "@shared/types";
 
-interface RawTelemetryPacket {
+export interface RawTelemetryPacket {
   header: string;
   timestamp_ms: number;
   accel_x: number;
@@ -40,6 +40,10 @@ interface RawTelemetryPacket {
   armed?: boolean;
   state_code?: number;
   throttle_us?: number;
+  on_ground?: boolean;
+  flight_phase?: number;
+  fast_g?: number;
+  outputs_active?: boolean;
 }
 
 const FLIGHT_STATE_MAP: Record<string, FlightState> = {
@@ -89,6 +93,10 @@ export function mapTelemetryPacket(raw: RawTelemetryPacket): TelemetryPacket {
     armed: raw.armed ?? false,
     stateCode: raw.state_code ?? 0,
     throttleUs: raw.throttle_us ?? 0,
+    onGround: raw.on_ground ?? false,
+    flightPhase: raw.flight_phase ?? 0,
+    fastG: raw.fast_g ?? raw.g_force ?? 0,
+    outputsActive: raw.outputs_active ?? (raw.throttle_us ? raw.throttle_us > 1000 : false),
     receivedAt: Date.now(),
   };
 }

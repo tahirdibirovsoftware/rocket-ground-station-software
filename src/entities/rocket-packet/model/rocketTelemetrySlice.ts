@@ -33,6 +33,19 @@ export const rocketTelemetrySlice = createSlice({
       }
     },
 
+    /** Push a batch of rocket packets. Updates latest and appends all to history in one transaction. */
+    rocketPacketsReceived(state, action: PayloadAction<TelemetryPacket[]>) {
+      if (action.payload.length === 0) return;
+      state.latest = action.payload[action.payload.length - 1];
+      state.packetCount += action.payload.length;
+
+      // Maintain fixed-size history
+      state.history.push(...action.payload);
+      if (state.history.length > HISTORY_LIMITS.ROCKET_BUFFER_SIZE) {
+        state.history = state.history.slice(-HISTORY_LIMITS.ROCKET_BUFFER_SIZE);
+      }
+    },
+
     /** Reset all rocket telemetry state. */
     rocketTelemetryReset() {
       return initialState;
@@ -40,7 +53,7 @@ export const rocketTelemetrySlice = createSlice({
   },
 });
 
-export const { rocketPacketReceived, rocketTelemetryReset } =
+export const { rocketPacketReceived, rocketPacketsReceived, rocketTelemetryReset } =
   rocketTelemetrySlice.actions;
 
 export default rocketTelemetrySlice.reducer;

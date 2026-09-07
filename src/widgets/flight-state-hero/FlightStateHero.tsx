@@ -68,17 +68,23 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
   const latest = useAppSelector(selectLatestRocketPacket);
   const maxAltitude = useAppSelector(selectMaxAltitude);
 
+  const isConnected = latest !== null;
   const state = latest?.flightState ?? FlightState.Pad;
-  const stateTheme = STATE_COLORS[state];
+  const stateTheme = isConnected
+    ? STATE_COLORS[state]
+    : {
+        color: "var(--color-text-muted)",
+        bg: "rgba(255, 255, 255, 0.02)",
+        border: "rgba(255, 255, 255, 0.12)",
+      };
 
-  const currentAlt = latest && typeof latest.altitude === "number" ? latest.altitude : 0;
-  const currentSpeed = latest && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed : 0;
+  const currentAlt = isConnected && typeof latest.altitude === "number" ? latest.altitude : 0;
 
   // Determine if rocket is ascending or descending
-  const isDescending = state === FlightState.PrimaryChute || state === FlightState.SecondaryChute;
+  const isDescending = isConnected && (state === FlightState.PrimaryChute || state === FlightState.SecondaryChute);
 
   // Progress to apogee target (3000m competition baseline)
-  const apogeeProgress = Math.min(100, Math.max(0, (currentAlt / 3000) * 100));
+  const apogeeProgress = isConnected ? Math.min(100, Math.max(0, (currentAlt / 3000) * 100)) : 0;
 
   return (
     <PanelContainer
@@ -117,7 +123,7 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
           }}
         >
           {FLIGHT_PHASES.map((phase) => {
-            const isActive = phase === state;
+            const isActive = isConnected && phase === state;
             const phaseTheme = STATE_COLORS[phase];
             return (
               <div
@@ -148,14 +154,14 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
         <div
           style={{
             backgroundColor: stateTheme.bg,
-            border: `1.5px solid ${stateTheme.border}`,
+            border: isConnected ? `1.5px solid ${stateTheme.border}` : "1px dashed rgba(255, 255, 255, 0.2)",
             borderRadius: "0.5rem",
             padding: "1rem",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: `0 0 30px ${stateTheme.bg}`,
+            boxShadow: isConnected ? `0 0 30px ${stateTheme.bg}` : "none",
             transition: "all 300ms ease",
             position: "relative",
             overflow: "hidden",
@@ -171,12 +177,12 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
               marginBottom: "0.25rem",
             }}
           >
-            ACTIVE FLIGHT PHASE
+            {isConnected ? "ACTIVE FLIGHT PHASE" : "ROCKET AVIONICS (AA)"}
           </div>
 
           <div
             style={{
-              fontSize: "2.25rem",
+              fontSize: isConnected ? "2.25rem" : "1.6rem",
               fontWeight: 900,
               fontFamily: "var(--font-mono)",
               color: stateTheme.color,
@@ -184,17 +190,17 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
               letterSpacing: "0.08em",
               textAlign: "center",
               lineHeight: 1.1,
-              textShadow: `0 0 20px ${stateTheme.color}`,
+              textShadow: isConnected ? `0 0 20px ${stateTheme.color}` : "none",
             }}
           >
-            {t(I18N_KEYS[state])}
+            {isConnected ? t(I18N_KEYS[state]) : "STANDBY — NO SIGNAL"}
           </div>
 
           {/* Target Apogee Progress Bar */}
           <div style={{ width: "100%", maxWidth: 320, marginTop: "0.75rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.625rem", color: "var(--color-text-muted)", marginBottom: 2 }}>
               <span>Apogee Target</span>
-              <span>{apogeeProgress.toFixed(0)}% (3000m)</span>
+              <span>{isConnected ? `${apogeeProgress.toFixed(0)}% (3000m)` : "STANDBY"}</span>
             </div>
             <div style={{ width: "100%", height: 4, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2, overflow: "hidden" }}>
               <div
@@ -202,7 +208,7 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
                   width: `${apogeeProgress}%`,
                   height: "100%",
                   backgroundColor: stateTheme.color,
-                  boxShadow: `0 0 8px ${stateTheme.color}`,
+                  boxShadow: isConnected ? `0 0 8px ${stateTheme.color}` : "none",
                   transition: "width 300ms ease-out",
                 }}
               />
@@ -235,12 +241,12 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
                 {t("telemetry.altitude")}
               </span>
               <span style={{ fontSize: "0.625rem", color: "var(--color-status-nominal)", fontWeight: 700, fontFamily: "var(--font-mono)" }}>
-                MAX {maxAltitude.toFixed(0)}m
+                {isConnected ? `MAX ${maxAltitude.toFixed(0)}m` : "MAX ---"}
               </span>
             </div>
             <TelemetryValue
               label={t("telemetry.altitude")}
-              value={latest && typeof latest.altitude === "number" ? latest.altitude.toFixed(0) : "---"}
+              value={isConnected && typeof latest.altitude === "number" ? latest.altitude.toFixed(0) : "---"}
               unit={t("units.meters")}
               size="lg"
             />
@@ -262,17 +268,17 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
               <span style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", fontWeight: 600 }}>
                 {t("telemetry.velocity")}
               </span>
-              <span style={{ fontSize: "0.625rem", color: isDescending ? "var(--color-status-warning)" : "var(--color-status-info)", display: "flex", alignItems: "center", gap: 2, fontWeight: 700 }}>
+              <span style={{ fontSize: "0.625rem", color: isConnected ? (isDescending ? "var(--color-status-warning)" : "var(--color-status-info)") : "var(--color-text-muted)", display: "flex", alignItems: "center", gap: 2, fontWeight: 700 }}>
                 {isDescending ? <ArrowDownRight size={12} /> : <ArrowUpRight size={12} />}
-                {isDescending ? "DESCENT" : "ASCENT"}
+                {isConnected ? (isDescending ? "DESCENT" : "ASCENT") : "STANDBY"}
               </span>
             </div>
             <TelemetryValue
               label={t("telemetry.velocity")}
-              value={currentSpeed.toFixed(1)}
+              value={isConnected && typeof latest.gpsSpeed === "number" ? latest.gpsSpeed.toFixed(1) : "---"}
               unit={t("units.metersPerSecond")}
               size="lg"
-              color={isDescending ? "var(--color-status-warning)" : "var(--color-status-info)"}
+              color={isConnected ? (isDescending ? "var(--color-status-warning)" : "var(--color-status-info)") : undefined}
             />
           </div>
         </div>
@@ -311,10 +317,14 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
                   fontSize: "0.6875rem",
                   fontWeight: 700,
                   fontFamily: "var(--font-mono)",
-                  color: latest?.primaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-text-secondary)",
+                  color: isConnected
+                    ? latest?.primaryParachuteDeployed
+                      ? "var(--color-status-nominal)"
+                      : "var(--color-text-secondary)"
+                    : "var(--color-text-muted)",
                 }}
               >
-                {latest?.primaryParachuteDeployed ? "DEPLOYED" : "ARMED"}
+                {isConnected ? (latest?.primaryParachuteDeployed ? "DEPLOYED" : "ARMED") : "STANDBY"}
               </span>
             </div>
           </div>
@@ -345,10 +355,14 @@ export const FlightStateHero = React.memo(function FlightStateHero() {
                   fontSize: "0.6875rem",
                   fontWeight: 700,
                   fontFamily: "var(--font-mono)",
-                  color: latest?.secondaryParachuteDeployed ? "var(--color-status-nominal)" : "var(--color-text-secondary)",
+                  color: isConnected
+                    ? latest?.secondaryParachuteDeployed
+                      ? "var(--color-status-nominal)"
+                      : "var(--color-text-secondary)"
+                    : "var(--color-text-muted)",
                 }}
               >
-                {latest?.secondaryParachuteDeployed ? "DEPLOYED" : "ARMED"}
+                {isConnected ? (latest?.secondaryParachuteDeployed ? "DEPLOYED" : "ARMED") : "STANDBY"}
               </span>
             </div>
           </div>

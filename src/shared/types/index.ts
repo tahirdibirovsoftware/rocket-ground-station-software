@@ -52,6 +52,14 @@ export interface TelemetryPacket {
   armed: boolean;              // RF ARM command state
   stateCode: number;           // 0=DISARMED, 1=ARMED, 2=MOTORS_ON
   throttleUs: number;          // ESC pulse width (1000..2000 us)
+  /* ── Payload status fields (BB only) ── */
+  onGround: boolean;           // true = payload landed, false = in sky
+  flightPhase: number;         // 0=PRE_LAUNCH, 1=IN_AIR, 2=ON_GROUND
+  /* ── Firmware extension fields (BB & CC & AA) ── */
+  fastG: number;               // Fast transient accelerometer filter (g)
+  outputsActive: boolean;      // Live actuator output state (ESC / Buzzer firing)
+  bnoCalib?: number;           // BNO055 sensor calibration state (0..3)
+  flags?: number;              // Sensor health & status bitflags
   receivedAt: number;          // frontend timestamp (Date.now())
 }
 

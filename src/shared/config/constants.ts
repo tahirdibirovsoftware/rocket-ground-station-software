@@ -10,6 +10,8 @@ export const IPC_EVENTS = {
   ROCKET_TELEMETRY: "rocket-telemetry",
   PAYLOAD_TELEMETRY: "payload-telemetry",
   DRONE_TELEMETRY: "drone-telemetry",
+  PAYLOAD_STATUS: "payload-status",
+  DRONE_STATUS: "drone-status",
   CONNECTION_STATUS: "connection-status",
 } as const;
 
@@ -40,6 +42,8 @@ export const HISTORY_LIMITS = {
   PAYLOAD_BUFFER_SIZE: 3000,
   /** 10 minutes of drone data at ~5 Hz */
   DRONE_BUFFER_SIZE: 3000,
+  /** Maximum rolling points for real-time charting (~60-80s window at 5 Hz) */
+  CHART_WINDOW_LIMIT: 400,
 } as const;
 
 /** Route paths */

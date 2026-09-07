@@ -2,6 +2,7 @@
 
 use super::config::*;
 use super::reader::*;
+use crate::protocol::rocket_packet::FlightState;
 
 /// Helper: build valid rocket bytes.
 fn valid_rocket_bytes() -> Vec<u8> {
@@ -251,6 +252,351 @@ fn parse_uplink_disarm_ack_line() {
     assert_eq!(parser.stats.last_uplink_ack, Some(false));
 }
 
+// ============================================================================
+// Binary RF Protocol Tests
+// ============================================================================
+
+fn build_binary_telemetry_frame(device: u8, flags: u16, phase: u8, ground: u8) -> Vec<u8> {
+    use crate::protocol::binary_packet::{crc16_ccitt, PKT_TELEMETRY, SYNC1, SYNC2};
+
+    let mut frame = vec![
+        SYNC1,
+        SYNC2,
+        0x01,
+        device,
+        PKT_TELEMETRY,
+        0x34, 0x12,
+        0x78, 0x56, 0x34, 0x12,
+        71,
+    ];
+
+    let mut p: Vec<u8> = Vec::with_capacity(71);
+    p.extend_from_slice(&flags.to_le_bytes());
+    for v in [123i16, -456, 981, 500, -250, 125, 123, -456, 789] {
+        p.extend_from_slice(&v.to_le_bytes());
+    }
+    p.extend_from_slice(&2345i16.to_le_bytes());
+    p.extend_from_slice(&10132u16.to_le_bytes());
+    p.extend_from_slice(&4550u16.to_le_bytes());
+    p.extend_from_slice(&123456i32.to_le_bytes());
+    p.extend_from_slice(&2234i16.to_le_bytes());
+    p.extend_from_slice(&5120u16.to_le_bytes());
+    let lat_e7 = (38.3687 * 10_000_000.0) as i32;
+    let lon_e7 = (34.0370 * 10_000_000.0) as i32;
+    p.extend_from_slice(&lat_e7.to_le_bytes());
+    p.extend_from_slice(&lon_e7.to_le_bytes());
+    p.extend_from_slice(&150025i32.to_le_bytes());
+    p.extend_from_slice(&1250u16.to_le_bytes());
+    p.extend_from_slice(&18000u16.to_le_bytes());
+    p.push(8);
+    for v in [550i16, -320, 9000] {
+        p.extend_from_slice(&v.to_le_bytes());
+    }
+    p.extend_from_slice(&45678i32.to_le_bytes());
+    p.extend_from_slice(&(-1234i16).to_le_bytes());
+    p.extend_from_slice(&1234u16.to_le_bytes());
+    p.extend_from_slice(&(-567i16).to_le_bytes());
+    p.extend_from_slice(&1050u16.to_le_bytes());
+    p.push(phase);
+    p.push(ground);
+
+    frame.extend_from_slice(&p);
+    let crc = crc16_ccitt(&frame);
+    frame.extend_from_slice(&crc.to_le_bytes());
+    frame
+}
+
+fn build_binary_status_frame(ground: u8, phase: u8) -> Vec<u8> {
+    use crate::protocol::binary_packet::{crc16_ccitt, PKT_STATUS, SYNC1, SYNC2};
+
+    let mut frame = vec![
+        SYNC1,
+        SYNC2,
+        0x01,
+        0xBB,
+        PKT_STATUS,
+        0x05, 0x00,
+        0x78, 0x56, 0x34, 0x12,
+        2,
+        ground,
+        phase,
+    ];
+    let crc = crc16_ccitt(&frame);
+    frame.extend_from_slice(&crc.to_le_bytes());
+    frame
+}
+
+/// Build a drone-shaped telemetry frame (72-byte payload).
+fn build_binary_drone_frame(flags: u16, state_code: u8, throttle_us: u16) -> Vec<u8> {
+    use crate::protocol::binary_packet::{crc16_ccitt, PKT_TELEMETRY, SYNC1, SYNC2};
+
+    let mut frame = vec![
+        SYNC1,
+        SYNC2,
+        0x01,
+        0xCC,
+        PKT_TELEMETRY,
+        0x78, 0x56,
+        0x78, 0x56, 0x34, 0x12,
+        72,
+    ];
+
+    let mut p: Vec<u8> = Vec::with_capacity(72);
+    p.extend_from_slice(&flags.to_le_bytes());
+    for v in [123i16, -456, 981, 500, -250, 125, 123, -456, 789] {
+        p.extend_from_slice(&v.to_le_bytes());
+    }
+    p.extend_from_slice(&2345i16.to_le_bytes());
+    p.extend_from_slice(&10132u16.to_le_bytes());
+    p.extend_from_slice(&4550u16.to_le_bytes());
+    p.extend_from_slice(&123456i32.to_le_bytes());
+    p.extend_from_slice(&2234i16.to_le_bytes());
+    p.extend_from_slice(&5120u16.to_le_bytes());
+    let lat_e7 = (38.3687 * 10_000_000.0) as i32;
+    let lon_e7 = (34.0370 * 10_000_000.0) as i32;
+    p.extend_from_slice(&lat_e7.to_le_bytes());
+    p.extend_from_slice(&lon_e7.to_le_bytes());
+    p.extend_from_slice(&150025i32.to_le_bytes());
+    p.extend_from_slice(&1250u16.to_le_bytes());
+    p.extend_from_slice(&18000u16.to_le_bytes());
+    p.push(8);
+    for v in [550i16, -320, 9000] {
+        p.extend_from_slice(&v.to_le_bytes());
+    }
+    p.extend_from_slice(&45678i32.to_le_bytes());
+    p.extend_from_slice(&(-1234i16).to_le_bytes());
+    p.extend_from_slice(&1234u16.to_le_bytes());
+    p.extend_from_slice(&(-567i16).to_le_bytes());
+    p.extend_from_slice(&25i16.to_le_bytes());
+    p.push(state_code);
+    p.extend_from_slice(&throttle_us.to_le_bytes());
+
+    frame.extend_from_slice(&p);
+    let crc = crc16_ccitt(&frame);
+    frame.extend_from_slice(&crc.to_le_bytes());
+    frame
+}
+
+/// Build a drone status frame: [state_code, throttle u16, armed].
+fn build_binary_drone_status_frame(state_code: u8, throttle_us: u16, armed: u8) -> Vec<u8> {
+    use crate::protocol::binary_packet::{crc16_ccitt, PKT_STATUS, SYNC1, SYNC2};
+
+    let mut frame = vec![
+        SYNC1,
+        SYNC2,
+        0x01,
+        0xCC,
+        PKT_STATUS,
+        0x06, 0x00,
+        0x78, 0x56, 0x34, 0x12,
+        4,
+        state_code,
+    ];
+    frame.extend_from_slice(&throttle_us.to_le_bytes());
+    frame.push(armed);
+    let crc = crc16_ccitt(&frame);
+    frame.extend_from_slice(&crc.to_le_bytes());
+    frame
+}
+
+#[test]
+fn parse_binary_payload_telemetry_frame() {
+    let mut parser = FrameParser::new();
+    let frame = build_binary_telemetry_frame(0xBB, 0xFFFF, 1, 0);
+    let packets = parser.feed(&frame);
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Payload(pkt) => {
+            assert_eq!(pkt.header, "BB");
+            assert_eq!(pkt.timestamp_ms, 0x12345678);
+            assert!((pkt.altitude - 1234.56).abs() < 0.01);
+            assert!((pkt.latitude - 38.3687).abs() < 1e-4);
+            assert!((pkt.rel_alt - 456.78).abs() < 0.01);
+            assert_eq!(pkt.flight_phase, 1);
+            assert!(!pkt.on_ground);
+        }
+        other => panic!("expected payload packet, got {other:?}"),
+    }
+    assert_eq!(parser.stats.payload_packets, 1);
+}
+
+#[test]
+fn parse_binary_drone_telemetry_frame() {
+    let mut parser = FrameParser::new();
+    let frame = build_binary_drone_frame(0xFFFF, 2, 1480);
+    let packets = parser.feed(&frame);
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Drone(pkt) => {
+            assert_eq!(pkt.header, "CC");
+            assert_eq!(pkt.state_code, 2);
+            assert_eq!(pkt.throttle_us, 1480);
+        }
+        other => panic!("expected drone packet, got {other:?}"),
+    }
+    assert_eq!(parser.stats.drone_packets, 1);
+}
+
+#[test]
+fn parse_binary_drone_status_frame() {
+    let mut parser = FrameParser::new();
+    let frame = build_binary_drone_status_frame(3, 1234, 1);
+    let packets = parser.feed(&frame);
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::DroneStatus {
+            state_code,
+            throttle_us,
+            armed,
+        } => {
+            assert_eq!(*state_code, 3);
+            assert_eq!(*throttle_us, 1234);
+            assert!(*armed);
+        }
+        other => panic!("expected drone status, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_binary_firmware_drone_status_2_bytes() {
+    use crate::protocol::binary_packet::{crc16_ccitt, PKT_STATUS, SYNC1, SYNC2};
+
+    let mut parser = FrameParser::new();
+    let mut frame = vec![
+        SYNC1,
+        SYNC2,
+        0x01,
+        0xCC,
+        PKT_STATUS,
+        0x07, 0x00,
+        0x78, 0x56, 0x34, 0x12,
+        2,
+        1, // output active
+        1, // flight phase 1 (IN_AIR)
+    ];
+    let crc = crc16_ccitt(&frame);
+    frame.extend_from_slice(&crc.to_le_bytes());
+
+    let packets = parser.feed(&frame);
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::DroneStatus {
+            state_code,
+            throttle_us,
+            armed,
+        } => {
+            assert_eq!(*state_code, 1);
+            assert_eq!(*throttle_us, 1480);
+            assert!(*armed);
+        }
+        other => panic!("expected drone status, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_binary_firmware_drone_telemetry_71_bytes() {
+    let mut parser = FrameParser::new();
+    let frame = build_binary_telemetry_frame(0xCC, 0xFFFF, 1, 1);
+    let packets = parser.feed(&frame);
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Drone(pkt) => {
+            assert_eq!(pkt.header, "CC");
+            assert_eq!(pkt.flight_phase, 1);
+            assert!(pkt.outputs_active);
+            assert_eq!(pkt.throttle_us, 1480);
+            assert!((pkt.fast_g - 1.05).abs() < 0.01);
+            assert!(!pkt.on_ground);
+        }
+        other => panic!("expected drone packet, got {other:?}"),
+    }
+    assert_eq!(parser.stats.drone_packets, 1);
+}
+
+#[test]
+fn parse_binary_status_frame() {
+    let mut parser = FrameParser::new();
+    let frame = build_binary_status_frame(1, 2);
+    let packets = parser.feed(&frame);
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::PayloadStatus {
+            on_ground,
+            flight_phase,
+            outputs_active,
+        } => {
+            assert!(*on_ground);
+            assert_eq!(*flight_phase, 2);
+            assert!(*outputs_active);
+        }
+        other => panic!("expected payload status, got {other:?}"),
+    }
+}
+
+#[test]
+fn binary_frame_split_across_feeds() {
+    let mut parser = FrameParser::new();
+    let frame = build_binary_telemetry_frame(0xBB, 0xFFFF, 1, 0);
+
+    // Feed byte-by-byte
+    let mut all = Vec::new();
+    for &b in &frame {
+        all.extend(parser.feed(&[b]));
+    }
+
+    assert_eq!(all.len(), 1);
+    assert!(matches!(all[0], ParsedPacket::Payload(_)));
+}
+
+#[test]
+fn binary_frame_corrupt_crc_counts_failure() {
+    let mut parser = FrameParser::new();
+    let mut frame = build_binary_telemetry_frame(0xBB, 0xFFFF, 1, 0);
+    let last = frame.len() - 1;
+    frame[last] ^= 0xFF;
+
+    let packets = parser.feed(&frame);
+    assert!(packets.is_empty());
+    assert_eq!(parser.stats.checksum_failures, 1);
+    assert_eq!(parser.stats.payload_packets, 0);
+}
+
+#[test]
+fn binary_and_csv_streams_interleaved() {
+    let mut parser = FrameParser::new();
+    let mut bytes = valid_rocket_bytes();
+    bytes.extend_from_slice(&build_binary_telemetry_frame(0xBB, 0xFFFF, 1, 0));
+    bytes.extend_from_slice(b"1\n");
+    bytes.extend_from_slice(&build_binary_status_frame(0, 0));
+
+    let packets = parser.feed(&bytes);
+
+    assert_eq!(packets.len(), 3);
+    assert!(matches!(packets[0], ParsedPacket::Rocket(_)));
+    assert!(matches!(packets[1], ParsedPacket::Payload(_)));
+    assert!(matches!(packets[2], ParsedPacket::PayloadStatus { .. }));
+    assert_eq!(parser.stats.rocket_packets, 1);
+    assert_eq!(parser.stats.payload_packets, 1);
+    assert_eq!(parser.stats.uplink_acks, 1);
+}
+
+#[test]
+fn binary_sync_garbage_resyncs() {
+    let mut parser = FrameParser::new();
+    // Stray 0xAA followed by non-0x55, then a valid frame
+    let mut bytes = vec![0xAA, 0x01, 0x02, b'\n'];
+    bytes.extend_from_slice(&build_binary_telemetry_frame(0xBB, 0xFFFF, 1, 0));
+
+    let packets = parser.feed(&bytes);
+    assert_eq!(packets.len(), 1);
+    assert!(matches!(packets[0], ParsedPacket::Payload(_)));
+}
+
 #[test]
 fn uplink_acks_interleaved_with_telemetry() {
     let mut parser = FrameParser::new();
@@ -276,3 +622,138 @@ fn non_ack_short_lines_not_counted() {
     assert_eq!(parser.stats.uplink_acks, 0);
     assert_eq!(parser.stats.last_uplink_ack, None);
 }
+
+#[test]
+fn parse_payload_packet_with_flight_phase_extension() {
+    // BB payload with 32 fields: shared rel_alt/vel/g/dpdt + on_ground/flight_phase
+    let line = "BB,15000,-0.05,0.08,9.8,-0.01,0.01,0.02,10.4,-9.5,40.0,25.0,960.0,50.0,1200.0,23.5,51.0,38.3700,34.0380,1200.0,12.5,180.0,2.0,3.0,4.0,1198.50,-14.80,1.02,-1.77,0,1,0\n";
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(line.as_bytes());
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Payload(pkt) => {
+            assert_eq!(pkt.header, "BB");
+            assert!((pkt.rel_alt - 1198.50).abs() < 0.01);
+            assert!((pkt.vertical_velocity - -14.80).abs() < 0.01);
+            assert!((pkt.g_force - 1.02).abs() < 0.01);
+            assert!((pkt.dpdt - -1.77).abs() < 0.01);
+            assert!(!pkt.on_ground, "payload should be in sky");
+            assert_eq!(pkt.flight_phase, 1, "phase should be IN_AIR");
+            assert!(!pkt.armed);
+        }
+        other => panic!("expected payload packet, got {other:?}"),
+    }
+    assert_eq!(parser.stats.payload_packets, 1);
+}
+
+#[test]
+fn parse_payload_packet_landed_on_ground() {
+    // BB payload landed: on_ground=1, flight_phase=2 (ON_GROUND)
+    let line = "BB,15000,-0.05,0.08,9.8,-0.01,0.01,0.02,10.4,-9.5,40.0,25.0,960.0,50.0,2.0,23.5,51.0,38.3700,34.0380,2.0,0.0,0.0,2.0,3.0,4.0,0.05,0.00,1.00,0.01,1,2,0\n";
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(line.as_bytes());
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Payload(pkt) => {
+            assert!(pkt.on_ground, "payload should be on ground");
+            assert_eq!(pkt.flight_phase, 2, "phase should be ON_GROUND");
+        }
+        other => panic!("expected payload packet, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_payload_packet_with_sensor_off_placeholders() {
+    // IMU/GPS off → "N" placeholders; payload status extension still present
+    let line = "BB,15000,N,N,N,N,N,N,N,N,N,25.0,960.0,50.0,2.0,23.5,51.0,N,N,N,N,N,0.0,0.0,0.0,0.05,0.00,1.00,0.01,1,2,0\n";
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(line.as_bytes());
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Payload(pkt) => {
+            assert_eq!(pkt.accel_x, 0.0);
+            assert_eq!(pkt.latitude, 0.0);
+            assert!(pkt.on_ground);
+            assert_eq!(pkt.flight_phase, 2);
+        }
+        other => panic!("expected payload packet, got {other:?}"),
+    }
+}
+
+#[test]
+fn parse_binary_rocket_telemetry_frame() {
+    use crate::protocol::binary_packet::{
+        crc16_ccitt, ROCKET_FRAME_SIZE, ROCKET_HDR0, ROCKET_HDR1, ROCKET_PAYLOAD_LEN,
+        ROCKET_TYPE_TELEM,
+    };
+
+    let mut frame = Vec::with_capacity(ROCKET_FRAME_SIZE);
+    frame.push(ROCKET_HDR0);
+    frame.push(ROCKET_HDR1);
+    frame.push(ROCKET_TYPE_TELEM);
+    frame.push(ROCKET_PAYLOAD_LEN as u8);
+
+    // ms: 154000
+    frame.extend_from_slice(&154000u32.to_le_bytes());
+    // qw, qx, qy, qz
+    frame.extend_from_slice(&((0.95 * 32767.0) as i16).to_le_bytes());
+    frame.extend_from_slice(&0i16.to_le_bytes());
+    frame.extend_from_slice(&0i16.to_le_bytes());
+    frame.extend_from_slice(&0i16.to_le_bytes());
+    // accel_x, y, z (x100)
+    frame.extend_from_slice(&(250i16).to_le_bytes());
+    frame.extend_from_slice(&(10i16).to_le_bytes());
+    frame.extend_from_slice(&(980i16).to_le_bytes());
+    // angles: roll 15.0 deg, pitch -2.0 deg, yaw 90.0 deg (x10)
+    frame.extend_from_slice(&(150i16).to_le_bytes());
+    frame.extend_from_slice(&(-20i16).to_le_bytes());
+    frame.extend_from_slice(&(900i16).to_le_bytes());
+    // bme: temp 28.5 C, pres 965.0 hPa, hum 42.0 % (x10)
+    frame.extend_from_slice(&(285i16).to_le_bytes());
+    frame.extend_from_slice(&(9650i16).to_le_bytes());
+    frame.extend_from_slice(&(420i16).to_le_bytes());
+    // altitude: 512.34 m (x100)
+    frame.extend_from_slice(&(51234i32).to_le_bytes());
+    // aht: 28.0 C, 43.0 % (x10)
+    frame.extend_from_slice(&(280i16).to_le_bytes());
+    frame.extend_from_slice(&(430i16).to_le_bytes());
+    // gps: lat 38.3687, lon 34.0370 (x1e7)
+    frame.extend_from_slice(&((38.3687 * 1e7) as i32).to_le_bytes());
+    frame.extend_from_slice(&((34.0370 * 1e7) as i32).to_le_bytes());
+    // gps_alt: 1200 m
+    frame.extend_from_slice(&(1200i16).to_le_bytes());
+    // total_g: 1.15 g (x100)
+    frame.extend_from_slice(&(115i16).to_le_bytes());
+    // vertical_speed: 12.5 m/s (x100)
+    frame.extend_from_slice(&(1250i16).to_le_bytes());
+    // state: 1 (FS_LAUNCHED -> Powered), flags: 0x0F, bno_calib: 3
+    frame.push(1);
+    frame.push(0x0F);
+    frame.push(3);
+
+    let crc = crc16_ccitt(&frame[4..59]);
+    frame.extend_from_slice(&crc.to_le_bytes());
+
+    let mut parser = FrameParser::new();
+    let packets = parser.feed(&frame);
+
+    assert_eq!(packets.len(), 1);
+    match &packets[0] {
+        ParsedPacket::Rocket(pkt) => {
+            assert_eq!(pkt.header, "AA");
+            assert_eq!(pkt.timestamp_ms, 154000);
+            assert!((pkt.altitude - 512.34).abs() < 0.05);
+            assert!((pkt.vertical_velocity - 12.5).abs() < 0.05);
+            assert!((pkt.latitude - 38.3687).abs() < 0.0001);
+            assert_eq!(pkt.flight_state, FlightState::Powered);
+            assert_eq!(pkt.bno_calib, 3);
+            assert_eq!(pkt.flags, 0x0F);
+        }
+        other => panic!("expected rocket packet, got {other:?}"),
+    }
+    assert_eq!(parser.stats.rocket_packets, 1);
+}
+

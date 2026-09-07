@@ -23,14 +23,9 @@ function drawSparkline(
   const ctx = canvas.getContext("2d");
   if (!ctx || data.length < 2) return;
 
-  const rect = canvas.getBoundingClientRect();
-  if (canvas.width !== rect.width || canvas.height !== rect.height) {
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-  }
-
   const w = canvas.width;
   const h = canvas.height;
+  if (w <= 0 || h <= 0) return;
   ctx.clearRect(0, 0, w, h);
 
   // Take up to last 150 data points (~30 seconds at 5 Hz)
@@ -125,9 +120,49 @@ export const ScientificDataPanel = React.memo(function ScientificDataPanel() {
     };
   }, [history]);
 
+  const rafIdRef = useRef<number | null>(null);
+
+  // ResizeObserver: updates canvas pixel dimensions without forced reflow
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width <= 0 || height <= 0) continue;
+        const dpr = window.devicePixelRatio || 1;
+        const targetW = Math.round(width * dpr);
+        const targetH = Math.round(height * dpr);
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+          if (history.length > 1) {
+            drawSparkline(canvas, history);
+          }
+        }
+      }
+    });
+
+    ro.observe(canvas);
+    return () => {
+      ro.disconnect();
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, [history]);
+
   useEffect(() => {
     if (canvasRef.current && history.length > 1) {
-      drawSparkline(canvasRef.current, history);
+      if (rafIdRef.current !== null) return;
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        if (canvasRef.current) {
+          drawSparkline(canvasRef.current, history);
+        }
+      });
     }
   }, [history]);
 

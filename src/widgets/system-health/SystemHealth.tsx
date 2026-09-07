@@ -36,6 +36,7 @@ export const SystemHealth = React.memo(function SystemHealth() {
       id="system-health"
       title={t("dashboard.team.systemHealth")}
       icon={<HeartPulse size={14} />}
+      dense
       headerRight={
         <StatusIndicator
           variant={!isConnected ? "muted" : "nominal"}

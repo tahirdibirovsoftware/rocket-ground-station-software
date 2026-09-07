@@ -22,6 +22,8 @@ interface PanelContainerProps {
   headerRight?: React.ReactNode;
   /** HTML id for testing. */
   id?: string;
+  /** Compact layout — tighter header/body padding for dense dashboards. */
+  dense?: boolean;
 }
 
 export const PanelContainer = React.memo(function PanelContainer({
@@ -33,6 +35,7 @@ export const PanelContainer = React.memo(function PanelContainer({
   children,
   headerRight,
   id,
+  dense = false,
 }: PanelContainerProps) {
   const glowClass =
     glow === "green"
@@ -64,9 +67,10 @@ export const PanelContainer = React.memo(function PanelContainer({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "0.625rem 0.875rem",
+            padding: dense ? "0.4rem 0.75rem" : "0.625rem 0.875rem",
             borderBottom: "1px solid var(--color-border-default)",
             backgroundColor: "var(--color-bg-secondary)",
+            flexShrink: 0,
           }}
         >
           <div
@@ -99,7 +103,7 @@ export const PanelContainer = React.memo(function PanelContainer({
       <div
         className="panel-body"
         style={{
-          padding: "var(--spacing-panel)",
+          padding: dense ? "0.5rem 0.75rem" : "var(--spacing-panel)",
           flex: 1,
           minHeight: 0,
         }}

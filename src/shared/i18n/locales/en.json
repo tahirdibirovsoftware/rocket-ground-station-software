@@ -39,6 +39,8 @@
   },
   "telemetry": {
     "altitude": "Altitude",
+    "relativeAltitude": "Altitude (AGL)",
+    "mslAltitude": "MSL Alt (Sea Level)",
     "velocity": "Velocity",
     "pressure1": "Pressure 1",
     "pressure2": "Pressure 2",
@@ -58,6 +60,31 @@
     "milliseconds": "ms",
     "hertz": "Hz"
   },
+  "avionics": {
+    "title": "Rocket Avionics (AA)",
+    "standby": "STANDBY",
+    "awaitingSignal": "STANDBY - AWAITING SIGNAL (AA)",
+    "bnoCalib": "BNO Calib",
+    "calibrated": "FULL (3/3)",
+    "drogueChute": "Drogue Chute (Apogee)",
+    "mainChute": "Main Chute (500m)"
+  },
+  "chartStream": {
+    "auto": "AUTO",
+    "rocket": "ROCKET (AA)",
+    "payload": "PAYLOAD (BB)",
+    "drone": "DRONE (CC)",
+    "noData": "NO ACTIVE TELEMETRY"
+  },
+  "mapHud": {
+    "gpsLocked": "3D FIX",
+    "indoorsNoFix": "INDOORS (0 SATS)",
+    "noSignal": "NO SIGNAL",
+    "focusRocket": "Rocket",
+    "focusPayload": "Payload",
+    "focusDrone": "Drone",
+    "fitAll": "Fit All"
+  },
   "droneControl": {
     "title": "Drone Engine Control",
     "state": "Flight State",
@@ -68,11 +95,13 @@
     "stateDisabled": "DISARMED",
     "stateArmed": "ARMED",
     "stateMotorsOn": "MOTORS ON",
+    "stateMotorsHold": "MOTORS HOLD",
+    "stateTouchdown": "TOUCHDOWN",
     "unknownState": "CODE {{code}}",
-    "ackLabel": "CMD ACK: {{state}} ({{count}} received)",
+    "echoLabel": "UPLINK ECHO: {{state}} ({{count}} received)",
     "ackArmed": "ARMED",
     "ackDisarmed": "DISARMED",
-    "ackWaiting": "CMD ACK: WAITING (drone echoes '1'/'0' after state change)",
+    "ackWaiting": "UPLINK ECHO: WAITING (drone ACK '1'/'0' or payload sky/landed status)",
     "ackMock": "SIMULATED ACK: commands applied to mock drone",
     "armEngine": "ARM ENGINE",
     "disarmEngine": "DISARM ENGINE",
@@ -86,7 +115,27 @@
     "climbRate": "Climb Rate",
     "relativeAltitude": "Relative Altitude",
     "gForce": "G-Force",
+    "fastG": "Fast-G Filter",
+    "outputStatus": "Actuator Output",
+    "outputActive": "ACTIVE (1480 µs / Stable)",
+    "outputInactive": "CUTOFF (1000 µs / Motion)",
     "course": "Drone Course"
+  },
+  "dronePhase": {
+    "preLaunch": "PRE-LAUNCH",
+    "inAir": "IN AIR",
+    "onGround": "ON GROUND (LANDED)"
+  },
+  "payloadPhase": {
+    "preLaunch": "PRE-LAUNCH",
+    "inAir": "IN AIR",
+    "onGround": "ON GROUND",
+    "skyStatus": "IN SKY",
+    "landedStatus": "LANDED",
+    "buzzerActive": "ACTIVE (Buzzer/ESC Firing)",
+    "buzzerCutoff": "CUTOFF (Motion / G-Force)",
+    "fastG": "Fast-G Filter",
+    "outputs": "Actuator Output"
   },
   "dashboard": {
     "team": {

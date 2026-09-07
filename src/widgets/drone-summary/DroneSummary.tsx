@@ -18,18 +18,47 @@ export const DroneSummary = React.memo(function DroneSummary() {
   const latest = useAppSelector(selectLatestDronePacket);
   const count = useAppSelector(selectDronePacketCount);
 
-  const stateLabel = (code: number) =>
-    code === 2
-      ? t("droneControl.stateMotorsOn")
-      : code === 1
-        ? t("droneControl.stateArmed")
-        : t("droneControl.stateDisabled");
+  const phaseLabel = (phase: number, stateCode: number) => {
+    switch (phase) {
+      case 0:
+        return t("dronePhase.preLaunch", "PRE-LAUNCH");
+      case 1:
+        return t("dronePhase.inAir", "IN AIR");
+      case 2:
+        return t("dronePhase.onGround", "ON GROUND");
+      default:
+        switch (stateCode) {
+          case 2:
+            return t("droneControl.stateMotorsOn");
+          case 3:
+            return t("droneControl.stateMotorsHold");
+          case 4:
+            return t("droneControl.stateTouchdown");
+          case 1:
+            return t("droneControl.stateArmed");
+          default:
+            return t("droneControl.stateDisabled");
+        }
+    }
+  };
+
+  const phaseColor = (phase: number) => {
+    switch (phase) {
+      case 1:
+        return "var(--color-status-nominal)";
+      case 2:
+        return "var(--color-status-info)";
+      default:
+        return "var(--color-status-warning)";
+    }
+  };
 
   return (
     <PanelContainer
       id="drone-summary"
       title={t("droneTelemetry.title", "Drone Telemetry")}
       icon={<Navigation size={14} />}
+      dense
       headerRight={
         <span
           className="font-telemetry"
@@ -53,9 +82,9 @@ export const DroneSummary = React.memo(function DroneSummary() {
             color="var(--color-status-nominal)"
           />
           <TelemetryValue
-            label={t("droneControl.state", "Flight State")}
-            value={latest ? stateLabel(latest.stateCode) : "---"}
-            color={latest && latest.stateCode === 2 ? "var(--color-status-nominal)" : latest && latest.armed ? "var(--color-status-warning)" : undefined}
+            label={t("droneControl.state", "Flight Phase")}
+            value={latest ? phaseLabel(latest.flightPhase, latest.stateCode) : "---"}
+            color={latest ? phaseColor(latest.flightPhase) : undefined}
           />
           <TelemetryValue
             label={t("droneTelemetry.climbRate", "Climb Rate")}
@@ -65,8 +94,26 @@ export const DroneSummary = React.memo(function DroneSummary() {
           />
         </div>
         <DataRow
-          label={t("droneTelemetry.relativeAltitude", "Relative Altitude")}
+          label={t("droneTelemetry.outputStatus", "Actuator Output")}
+          value={
+            latest
+              ? latest.outputsActive
+                ? t("droneTelemetry.outputActive", "ACTIVE (1480 µs / Stable)")
+                : t("droneTelemetry.outputInactive", "CUTOFF (1000 µs / Motion)")
+              : "---"
+          }
+        />
+        <DataRow
+          label={t("telemetry.relativeAltitude", "Altitude (AGL)")}
           value={latest && typeof latest.relAlt === "number" ? `${latest.relAlt.toFixed(1)} m` : "---"}
+        />
+        <DataRow
+          label={t("telemetry.mslAltitude", "MSL Alt (Sea Level)")}
+          value={latest && typeof latest.altitude === "number" ? `${latest.altitude.toFixed(1)} m` : "---"}
+        />
+        <DataRow
+          label={t("droneTelemetry.fastG", "Fast-G Filter")}
+          value={latest && typeof latest.fastG === "number" ? `${latest.fastG.toFixed(2)} g` : "---"}
         />
         <DataRow
           label={t("droneTelemetry.gForce", "G-Force")}

@@ -33,13 +33,29 @@ const PHASE_COLORS: Record<number, string> = {
 export const FlightTimeline = React.memo(function FlightTimeline() {
   const { t } = useTranslation();
   const latest = useAppSelector(selectLatestRocketPacket);
-  const currentState = latest?.flightState ?? FlightState.Pad;
+  const hasSignal = latest !== null;
+  const currentState = latest?.flightState ?? null;
 
   return (
     <PanelContainer
       id="flight-timeline"
-      title="Flight Timeline"
+      title={t("app.flightTimeline", "Flight Timeline")}
       icon={<Timer size={14} />}
+      headerRight={
+        <span
+          style={{
+            fontSize: "0.625rem",
+            fontFamily: "var(--font-mono)",
+            fontWeight: 700,
+            color: hasSignal ? "var(--color-status-nominal)" : "var(--color-text-muted)",
+            letterSpacing: "0.05em",
+          }}
+        >
+          {hasSignal
+            ? "ROCKET (AA) ACTIVE"
+            : t("avionics.awaitingSignal", "STANDBY - AWAITING SIGNAL (AA)")}
+        </span>
+      }
     >
       <div
         style={{
@@ -49,8 +65,8 @@ export const FlightTimeline = React.memo(function FlightTimeline() {
         }}
       >
         {PHASES.map(({ state, key }) => {
-          const isCurrent = state === currentState;
-          const isPast = state < currentState;
+          const isCurrent = hasSignal && state === currentState;
+          const isPast = hasSignal && currentState !== null && state < currentState;
           const color = PHASE_COLORS[state];
 
           return (

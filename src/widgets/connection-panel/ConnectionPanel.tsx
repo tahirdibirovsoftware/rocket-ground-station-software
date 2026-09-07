@@ -134,6 +134,7 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
       id="connection-panel"
       title={t("connection.title")}
       icon={<Plug size={14} />}
+      dense
       headerRight={<StatusIndicator variant={statusVariant} size={8} />}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>

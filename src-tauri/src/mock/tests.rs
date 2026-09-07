@@ -254,6 +254,40 @@ fn payload_coordinates_offset_from_rocket() {
 }
 
 #[test]
+fn payload_flight_phase_progression() {
+    use crate::protocol::telemetry_packet::TelemetryPacket;
+
+    let gen = MockGenerator::with_defaults();
+
+    // t=1s: on the pad → PRE_LAUNCH (0), sky... pre-launch, not on ground
+    let pre_launch = gen.generate_payload_bytes(1.0).expect("payload packet");
+    let MockPacket::Payload(pre_bytes) = pre_launch else {
+        panic!("expected payload packet");
+    };
+    let pre = TelemetryPacket::parse(std::str::from_utf8(&pre_bytes).unwrap()).unwrap();
+    assert_eq!(pre.flight_phase, 0, "phase should be PRE_LAUNCH");
+    assert!(!pre.on_ground);
+
+    // t=20s: powered/unpowered ascent → IN_AIR (1)
+    let in_air = gen.generate_payload_bytes(20.0).expect("payload packet");
+    let MockPacket::Payload(air_bytes) = in_air else {
+        panic!("expected payload packet");
+    };
+    let air = TelemetryPacket::parse(std::str::from_utf8(&air_bytes).unwrap()).unwrap();
+    assert_eq!(air.flight_phase, 1, "phase should be IN_AIR");
+    assert!(!air.on_ground);
+
+    // t=150s: under secondary chute → ON_GROUND (2)
+    let on_ground = gen.generate_payload_bytes(150.0).expect("payload packet");
+    let MockPacket::Payload(ground_bytes) = on_ground else {
+        panic!("expected payload packet");
+    };
+    let ground = TelemetryPacket::parse(std::str::from_utf8(&ground_bytes).unwrap()).unwrap();
+    assert_eq!(ground.flight_phase, 2, "phase should be ON_GROUND");
+    assert!(ground.on_ground);
+}
+
+#[test]
 fn tick_0_emits_packets() {
     let gen = MockGenerator::with_defaults();
     let packets = gen.generate_tick(0);
@@ -408,6 +442,8 @@ fn full_flight_simulation_all_packets_valid() {
                     ParsedPacket::Drone(_) => {
                         drone_count += 1;
                     }
+                    ParsedPacket::PayloadStatus { .. } => {}
+                    ParsedPacket::DroneStatus { .. } => {}
                 }
             }
         }

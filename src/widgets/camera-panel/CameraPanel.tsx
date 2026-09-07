@@ -219,7 +219,7 @@ export const CameraPanel = React.memo(function CameraPanel({ style }: CameraPane
         <div
           style={{
             flex: 1,
-            minHeight: 260,
+            minHeight: 0,
             width: "100%",
             position: "relative",
             borderRadius: "0.25rem",

@@ -164,6 +164,13 @@ impl CsvLogger {
                 format!("{:.6}", packet.longitude),
                 format!("{:.2}", packet.altitude),
                 format!("{:.2}", packet.temp),
+                format!("{:.2}", packet.rel_alt),
+                format!("{:.2}", packet.vertical_velocity),
+                format!("{:.3}", packet.g_force),
+                (packet.on_ground as u8).to_string(),
+                packet.flight_phase.to_string(),
+                format!("{:.3}", packet.fast_g),
+                (packet.outputs_active as u8).to_string(),
             ])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         writer
@@ -222,6 +229,9 @@ impl CsvLogger {
                 (packet.armed as u8).to_string(),
                 packet.state_code.to_string(),
                 packet.throttle_us.to_string(),
+                format!("{:.3}", packet.fast_g),
+                packet.flight_phase.to_string(),
+                (packet.outputs_active as u8).to_string(),
             ])
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         writer
@@ -323,6 +333,13 @@ impl CsvLogger {
                         "longitude",
                         "altitude_m",
                         "scientific_data",
+                        "rel_alt_m",
+                        "velocity_m_s",
+                        "g_force_g",
+                        "on_ground",
+                        "flight_phase",
+                        "fast_g_g",
+                        "outputs_active",
                     ],
                     "drone" => &[
                         "timestamp_ms",
@@ -339,6 +356,9 @@ impl CsvLogger {
                         "armed",
                         "state_code",
                         "throttle_us",
+                        "fast_g_g",
+                        "flight_phase",
+                        "outputs_active",
                     ],
                     "unified" => &[
                         "source",

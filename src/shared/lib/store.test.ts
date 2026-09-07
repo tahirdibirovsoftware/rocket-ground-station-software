@@ -7,18 +7,25 @@ import { configureStore } from "@reduxjs/toolkit";
 import { CircularBuffer } from "@shared/lib/CircularBuffer";
 import { mapTelemetryPacket } from "@shared/lib/mappers";
 import { FlightState } from "@shared/types";
+import { HISTORY_LIMITS } from "@shared/config/constants";
 
 import rocketTelemetryReducer, {
   rocketPacketReceived,
+  rocketPacketsReceived,
   rocketTelemetryReset,
 } from "@entities/rocket-packet/model/rocketTelemetrySlice";
 
 import payloadTelemetryReducer, {
   payloadPacketReceived,
+  payloadPacketsReceived,
+  payloadStatusReceived,
 } from "@entities/payload-packet/model/payloadTelemetrySlice";
+import { selectPayloadAltitudeHistory } from "@entities/payload-packet";
 
 import droneTelemetryReducer, {
   dronePacketReceived,
+  dronePacketsReceived,
+  droneStatusReceived,
 } from "@entities/drone-packet/model/droneTelemetrySlice";
 
 import connectionReducer, {
@@ -205,6 +212,52 @@ describe("Mappers", () => {
     expect(mapped.throttleUs).toBe(2000);
   });
 
+  it("maps payload status fields from raw packet", () => {
+    const raw = {
+      header: "BB",
+      timestamp_ms: 15000,
+      accel_x: -0.05,
+      accel_y: 0.08,
+      accel_z: 9.8,
+      gyro_x: -0.01,
+      gyro_y: 0.01,
+      gyro_z: 0.02,
+      mag_x: 10.4,
+      mag_y: -9.5,
+      mag_z: 40.0,
+      temp: 25.0,
+      pressure: 960.0,
+      humidity: 50.0,
+      altitude: 1200.0,
+      aht_temp: 23.5,
+      aht_hum: 51.0,
+      latitude: 38.37,
+      longitude: 34.038,
+      gps_altitude: 1200.0,
+      gps_speed: 12.5,
+      gps_course: 180.0,
+      roll: 2.0,
+      pitch: 3.0,
+      yaw: 4.0,
+      flight_state: "pad",
+      primary_parachute_deployed: false,
+      secondary_parachute_deployed: false,
+      rel_alt: 1198.5,
+      vertical_velocity: -14.8,
+      g_force: 1.02,
+      dpdt: -1.77,
+      on_ground: true,
+      flight_phase: 2,
+    };
+
+    const mapped = mapTelemetryPacket(raw);
+    expect(mapped.header).toBe("BB");
+    expect(mapped.relAlt).toBeCloseTo(1198.5);
+    expect(mapped.onGround).toBe(true);
+    expect(mapped.flightPhase).toBe(2);
+    expect(mapped.armed).toBe(false);
+  });
+
   it("maps all flight states correctly", () => {
     const states: [string, FlightState][] = [
       ["pad", FlightState.Pad],
@@ -291,6 +344,10 @@ const sampleTelemetryPacket = {
   armed: false,
   stateCode: 0,
   throttleUs: 0,
+  onGround: false,
+  flightPhase: 0,
+  fastG: 0,
+  outputsActive: false,
   receivedAt: Date.now(),
 };
 
@@ -324,6 +381,22 @@ describe("rocketTelemetrySlice", () => {
     expect(state.packetCount).toBe(650);
   });
 
+  it("appends a batch of rocket packets efficiently", () => {
+    const batch = [
+      { ...sampleTelemetryPacket, timestampMs: 100 },
+      { ...sampleTelemetryPacket, timestampMs: 200 },
+      { ...sampleTelemetryPacket, timestampMs: 300 },
+    ];
+    const state = rocketTelemetryReducer(
+      undefined,
+      rocketPacketsReceived(batch),
+    );
+    expect(state.latest?.timestampMs).toBe(300);
+    expect(state.packetCount).toBe(3);
+    expect(state.history).toHaveLength(3);
+    expect(state.history[2].timestampMs).toBe(300);
+  });
+
   it("resets to initial state", () => {
     let state = rocketTelemetryReducer(
       undefined,
@@ -342,6 +415,11 @@ describe("payloadTelemetrySlice", () => {
     expect(state.latest).toBeNull();
     expect(state.history).toEqual([]);
     expect(state.packetCount).toBe(0);
+    expect(state.status).toEqual({
+      onGround: null,
+      flightPhase: null,
+      outputsActive: null,
+    });
   });
 
   it("stores received packet as latest", () => {
@@ -351,6 +429,37 @@ describe("payloadTelemetrySlice", () => {
     );
     expect(state.latest).toEqual(sampleTelemetryPacket);
     expect(state.packetCount).toBe(1);
+    expect(state.history).toHaveLength(1);
+  });
+
+  it("updates payload status from status event", () => {
+    let state = payloadTelemetryReducer(
+      undefined,
+      payloadPacketReceived(sampleTelemetryPacket),
+    );
+    state = payloadTelemetryReducer(
+      state,
+      payloadStatusReceived({ on_ground: true, flight_phase: 2, outputs_active: true }),
+    );
+    expect(state.status).toEqual({ onGround: true, flightPhase: 2, outputsActive: true });
+    // Latest packet's phase and outputs are kept in sync
+    expect(state.latest?.onGround).toBe(true);
+    expect(state.latest?.flightPhase).toBe(2);
+    expect(state.latest?.outputsActive).toBe(true);
+  });
+
+  it("appends a batch of payload packets efficiently", () => {
+    const batch = [
+      { ...sampleTelemetryPacket, timestampMs: 100, temp: 21.0 },
+      { ...sampleTelemetryPacket, timestampMs: 200, temp: 22.0 },
+    ];
+    const state = payloadTelemetryReducer(
+      undefined,
+      payloadPacketsReceived(batch),
+    );
+    expect(state.latest?.temp).toBe(22.0);
+    expect(state.packetCount).toBe(2);
+    expect(state.history).toHaveLength(2);
   });
 
   it("caps history at PAYLOAD_BUFFER_SIZE (3000)", () => {
@@ -372,6 +481,13 @@ describe("droneTelemetrySlice", () => {
     expect(state.latest).toBeNull();
     expect(state.history).toEqual([]);
     expect(state.packetCount).toBe(0);
+    expect(state.status).toEqual({
+      stateCode: null,
+      throttleUs: null,
+      armed: null,
+      flightPhase: null,
+      outputsActive: null,
+    });
   });
 
   it("stores received packet as latest", () => {
@@ -381,6 +497,49 @@ describe("droneTelemetrySlice", () => {
     );
     expect(state.latest).toEqual(sampleTelemetryPacket);
     expect(state.packetCount).toBe(1);
+  });
+
+  it("stores drone status events", () => {
+    let state = droneTelemetryReducer(
+      undefined,
+      dronePacketReceived(sampleTelemetryPacket),
+    );
+    state = droneTelemetryReducer(
+      state,
+      droneStatusReceived({
+        state_code: 1,
+        throttle_us: 1480,
+        armed: true,
+        flight_phase: 1,
+        outputs_active: true,
+      }),
+    );
+    expect(state.status).toEqual({
+      stateCode: 1,
+      throttleUs: 1480,
+      armed: true,
+      flightPhase: 1,
+      outputsActive: true,
+    });
+    expect(state.latest?.stateCode).toBe(1);
+    expect(state.latest?.throttleUs).toBe(1480);
+    expect(state.latest?.armed).toBe(true);
+    expect(state.latest?.flightPhase).toBe(1);
+    expect(state.latest?.outputsActive).toBe(true);
+  });
+
+  it("appends a batch of drone packets efficiently", () => {
+    const batch = [
+      { ...sampleTelemetryPacket, timestampMs: 100, altitude: 50.0 },
+      { ...sampleTelemetryPacket, timestampMs: 200, altitude: 55.0 },
+    ];
+    const state = droneTelemetryReducer(
+      undefined,
+      dronePacketsReceived(batch),
+    );
+    expect(state.latest?.altitude).toBe(55.0);
+    expect(state.packetCount).toBe(2);
+    expect(state.history).toHaveLength(2);
   });
 });
 
@@ -502,5 +661,23 @@ describe("Redux Store Integration", () => {
     expect(state.payloadTelemetry.packetCount).toBe(1);
     expect(state.droneTelemetry.packetCount).toBe(1);
     expect(state.connection.mode).toBe("mock");
+  });
+
+  it("limits charting history to CHART_WINDOW_LIMIT points for high-frequency performance", () => {
+    let state = payloadTelemetryReducer(undefined, { type: "init" });
+    const batch = Array.from({ length: 500 }, (_, i) => ({
+      ...sampleTelemetryPacket,
+      timestampMs: i * 100,
+      altitude: i * 2,
+    }));
+    state = payloadTelemetryReducer(state, payloadPacketsReceived(batch));
+
+    const rootState = {
+      payloadTelemetry: state,
+    } as any;
+
+    const chartData = selectPayloadAltitudeHistory(rootState);
+    expect(chartData.length).toBe(HISTORY_LIMITS.CHART_WINDOW_LIMIT); // 400
+    expect(chartData[chartData.length - 1].t).toBe(499 * 100);
   });
 });

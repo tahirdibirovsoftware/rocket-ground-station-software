@@ -164,6 +164,12 @@ impl MockGenerator {
             armed: false,
             state_code: 0,
             throttle_us: 0,
+            on_ground: false,
+            flight_phase: 0,
+            fast_g: 0.0,
+            outputs_active: false,
+            bno_calib: 0,
+            flags: 0,
         };
         
         let csv_str = packet.to_csv_string();
@@ -177,11 +183,23 @@ impl MockGenerator {
         }
         let timestamp_ms = (elapsed_s * 1000.0) as u32;
         let alt = altitude_at(elapsed_s, &self.config.timings) * 0.98;
+        let vel = velocity_at(elapsed_s, &self.config.timings) * 0.98;
         let (lat, lon) = gps_at(elapsed_s, self.config.launch_lat, self.config.launch_lon);
         let payload_lat = lat + 0.0002;
         let payload_lon = lon - 0.0001;
         let press = pressure_from_altitude(alt);
-        
+
+        // Payload flight phase (mirrors Teensy payload state machine):
+        // PRE_LAUNCH (0) → IN_AIR (1) on launch → ON_GROUND (2) after landing
+        let rocket_state = flight_state_at(elapsed_s, &self.config.timings);
+        let flight_phase: u8 = match rocket_state {
+            FlightState::Pad => 0,                                     // PRE_LAUNCH
+            FlightState::SecondaryChute => 2,                          // ON_GROUND
+            _ => 1,                                                    // IN_AIR
+        };
+        let on_ground = flight_phase == 2;
+        let g_force = if rocket_state == FlightState::Powered { 4.0 } else { 1.0 };
+
         let packet = TelemetryPacket {
             header: "BB".to_string(),
             timestamp_ms,
@@ -203,21 +221,27 @@ impl MockGenerator {
             latitude: payload_lat,
             longitude: payload_lon,
             gps_altitude: alt,
-            gps_speed: 0.0,
-            gps_course: 0.0,
+            gps_speed: vel.abs(),
+            gps_course: 180.0,
             roll: 0.0,
             pitch: 0.0,
             yaw: 0.0,
             flight_state: FlightState::Pad,
             primary_parachute_deployed: false,
             secondary_parachute_deployed: false,
-            rel_alt: 0.0,
-            vertical_velocity: 0.0,
-            g_force: 0.0,
-            dpdt: 0.0,
+            rel_alt: alt,
+            vertical_velocity: vel,
+            g_force,
+            dpdt: -vel * 0.12,
             armed: false,
             state_code: 0,
             throttle_us: 0,
+            on_ground,
+            flight_phase,
+            fast_g: g_force,
+            outputs_active: on_ground,
+            bno_calib: 0,
+            flags: 0,
         };
         
         let csv_str = packet.to_csv_string();
@@ -311,6 +335,12 @@ impl MockGenerator {
             armed,
             state_code,
             throttle_us,
+            on_ground: false,
+            flight_phase: 0,
+            fast_g: g_force,
+            outputs_active: state_code == 2,
+            bno_calib: 0,
+            flags: 0,
         };
 
         let csv_str = packet.to_csv_string();

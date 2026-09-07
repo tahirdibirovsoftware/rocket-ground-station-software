@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { Power, ShieldOff, ShieldCheck, AlertTriangle, Radio } from "lucide-react";
 import { IPC_COMMANDS } from "@shared/config/constants";
@@ -15,17 +16,35 @@ import { useAppSelector } from "@app/store";
 import { selectLatestDronePacket } from "@entities/drone-packet";
 import { selectConnectionMode } from "@entities/connection";
 
-const DroneControlLabels = (
-  t: (key: string, options?: Record<string, unknown>) => string,
-) => {
-  const stateLabel = (code: number) =>
-    code === 2
-      ? t("droneControl.stateMotorsOn")
-      : code === 1
-        ? t("droneControl.stateArmed")
-        : t("droneControl.stateDisabled");
+const DroneControlLabels = (t: TFunction) => {
+  const stateLabel = (code: number) => {
+    switch (code) {
+      case 2:
+        return t("droneControl.stateMotorsOn");
+      case 3:
+        return t("droneControl.stateMotorsHold");
+      case 4:
+        return t("droneControl.stateTouchdown");
+      case 1:
+        return t("droneControl.stateArmed");
+      default:
+        return t("droneControl.stateDisabled");
+    }
+  };
+  const phaseLabel = (phase: number, code: number) => {
+    switch (phase) {
+      case 0:
+        return t("dronePhase.preLaunch", "PRE-LAUNCH");
+      case 1:
+        return t("dronePhase.inAir", "IN AIR");
+      case 2:
+        return t("dronePhase.onGround", "ON GROUND");
+      default:
+        return stateLabel(code);
+    }
+  };
   const armedLabel = (a: boolean) => (a ? t("droneControl.ackArmed") : t("droneControl.ackDisarmed"));
-  return { stateLabel, armedLabel };
+  return { stateLabel, phaseLabel, armedLabel };
 };
 
 export const DroneControl = React.memo(function DroneControl() {
@@ -43,6 +62,7 @@ export const DroneControl = React.memo(function DroneControl() {
   const isConnected = connectionMode !== "disconnected";
   const armed = latest?.armed ?? false;
   const stateCode = latest?.stateCode ?? 0;
+  const flightPhase = latest?.flightPhase ?? 0;
   const throttleUs = latest?.throttleUs ?? 0;
 
   // Command ACK from the flight controller: received "1"/"0" echoes over RF.
@@ -81,6 +101,7 @@ export const DroneControl = React.memo(function DroneControl() {
       id="drone-control"
       title={t("droneControl.title", "Drone Engine Control")}
       icon={<Power size={14} />}
+      dense
       headerRight={
         <StatusIndicator
           variant={!isConnected ? "muted" : armed ? "critical" : "nominal"}
@@ -99,19 +120,19 @@ export const DroneControl = React.memo(function DroneControl() {
           }}
         >
           <div style={readoutStyle}>
-            <div style={readoutLabelStyle}>{t("droneControl.state", "Flight State")}</div>
+            <div style={readoutLabelStyle}>{t("droneControl.state", "Flight Phase")}</div>
             <div
               style={{
                 ...readoutValueStyle,
                 color:
-                  stateCode === 2
+                  flightPhase === 1
                     ? "var(--color-status-nominal)"
-                    : stateCode === 1
-                      ? "var(--color-status-warning)"
-                      : "var(--color-text-secondary)",
+                    : flightPhase === 2
+                      ? "var(--color-status-info)"
+                      : "var(--color-status-warning)",
               }}
             >
-              {labels.stateLabel(stateCode)}
+              {labels.phaseLabel(flightPhase, stateCode)}
             </div>
           </div>
           <div style={readoutStyle}>
@@ -126,8 +147,17 @@ export const DroneControl = React.memo(function DroneControl() {
             </div>
           </div>
           <div style={readoutStyle}>
-            <div style={readoutLabelStyle}>{t("droneControl.throttle", "Throttle")}</div>
-            <div style={readoutValueStyle}>{throttleUs > 0 ? `${throttleUs} us` : "---"}</div>
+            <div style={readoutLabelStyle}>{t("droneTelemetry.outputStatus", "Actuator")}</div>
+            <div
+              style={{
+                ...readoutValueStyle,
+                color: latest?.outputsActive
+                  ? "var(--color-status-nominal)"
+                  : "var(--color-text-secondary)",
+              }}
+            >
+              {latest?.outputsActive ? `${throttleUs || 1480} µs` : `${throttleUs || 1000} µs`}
+            </div>
           </div>
         </div>
 
@@ -174,11 +204,11 @@ export const DroneControl = React.memo(function DroneControl() {
           {connectionMode === "mock"
             ? t("droneControl.ackMock", "SIMULATED ACK: commands applied to mock drone")
             : hasAck
-              ? t("droneControl.ackLabel", {
+              ? t("droneControl.echoLabel", {
                   state: labels.armedLabel(!!lastUplinkAck),
                   count: uplinkAcks,
                 })
-              : t("droneControl.ackWaiting", "CMD ACK: WAITING (drone echoes '1'/'0' after state change)")}
+              : t("droneControl.ackWaiting", "UPLINK ECHO: WAITING (drone ACK '1'/'0' or payload sky/landed status)")}
         </div>
 
         {/* ARM / DISARM buttons */}

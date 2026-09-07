@@ -1,5 +1,6 @@
+import React, { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Mountain, Zap, Gauge } from "lucide-react";
+import { Mountain, Zap, Gauge, Activity, Radio } from "lucide-react";
 import { ConnectionPanel } from "@widgets/connection-panel";
 import { AvionicsSummary } from "@widgets/avionics-summary";
 import { PayloadSummary } from "@widgets/payload-summary";
@@ -15,22 +16,193 @@ import {
   selectRocketAltitudeHistory,
   selectRocketVelocityHistory,
   selectRocketPressureHistory,
+  selectRocketPacketCount,
 } from "@entities/rocket-packet";
+import {
+  selectDroneAltitudeHistory,
+  selectDroneVelocityHistory,
+  selectDronePressureHistory,
+  selectDronePacketCount,
+} from "@entities/drone-packet";
+import {
+  selectPayloadAltitudeHistory,
+  selectPayloadVelocityHistory,
+  selectPayloadGForceHistory,
+  selectPayloadPacketCount,
+} from "@entities/payload-packet";
+
+/** Rocket charts panel - isolated subscriptions */
+const RocketCharts = React.memo(function RocketCharts() {
+  const { t } = useTranslation();
+  const altitudeData = useAppSelector(selectRocketAltitudeHistory);
+  const velocityData = useAppSelector(selectRocketVelocityHistory);
+  const rawPressureData = useAppSelector(selectRocketPressureHistory);
+  const pressureData = useMemo(() => rawPressureData.map((p) => ({ t: p.t, v: p.p1 })), [rawPressureData]);
+
+  return (
+    <>
+      <TelemetryChart
+        id="chart-altitude"
+        title={t("telemetry.altitude")}
+        icon={<Mountain size={14} />}
+        data={altitudeData}
+        color="rgb(0, 255, 136)"
+        unit={t("units.meters")}
+        flex
+        minHeight={70}
+      />
+      <TelemetryChart
+        id="chart-velocity"
+        title={t("telemetry.velocity")}
+        icon={<Zap size={14} />}
+        data={velocityData}
+        color="rgb(255, 170, 0)"
+        unit={t("units.metersPerSecond")}
+        flex
+        minHeight={70}
+      />
+      <TelemetryChart
+        id="chart-third"
+        title={t("telemetry.pressure1", "Pressure 1")}
+        icon={<Gauge size={14} />}
+        data={pressureData}
+        color="rgb(51, 153, 255)"
+        unit={t("units.hectopascals", "hPa")}
+        flex
+        minHeight={70}
+      />
+    </>
+  );
+});
+
+/** Payload charts panel - isolated subscriptions */
+const PayloadCharts = React.memo(function PayloadCharts() {
+  const { t } = useTranslation();
+  const altitudeData = useAppSelector(selectPayloadAltitudeHistory);
+  const velocityData = useAppSelector(selectPayloadVelocityHistory);
+  const gForceData = useAppSelector(selectPayloadGForceHistory);
+
+  return (
+    <>
+      <TelemetryChart
+        id="chart-altitude"
+        title={t("telemetry.altitude")}
+        icon={<Mountain size={14} />}
+        data={altitudeData}
+        color="rgb(0, 255, 136)"
+        unit={t("units.meters")}
+        flex
+        minHeight={70}
+      />
+      <TelemetryChart
+        id="chart-velocity"
+        title={t("telemetry.velocity")}
+        icon={<Zap size={14} />}
+        data={velocityData}
+        color="rgb(255, 170, 0)"
+        unit={t("units.metersPerSecond")}
+        flex
+        minHeight={70}
+      />
+      <TelemetryChart
+        id="chart-third"
+        title={t("droneTelemetry.gForce", "G-Force")}
+        icon={<Activity size={14} />}
+        data={gForceData}
+        color="rgb(255, 102, 178)"
+        unit="g"
+        flex
+        minHeight={70}
+      />
+    </>
+  );
+});
+
+/** Drone charts panel - isolated subscriptions */
+const DroneCharts = React.memo(function DroneCharts() {
+  const { t } = useTranslation();
+  const altitudeData = useAppSelector(selectDroneAltitudeHistory);
+  const velocityData = useAppSelector(selectDroneVelocityHistory);
+  const pressureData = useAppSelector(selectDronePressureHistory);
+
+  return (
+    <>
+      <TelemetryChart
+        id="chart-altitude"
+        title={t("telemetry.altitude")}
+        icon={<Mountain size={14} />}
+        data={altitudeData}
+        color="rgb(0, 255, 136)"
+        unit={t("units.meters")}
+        flex
+        minHeight={70}
+      />
+      <TelemetryChart
+        id="chart-velocity"
+        title={t("telemetry.velocity")}
+        icon={<Zap size={14} />}
+        data={velocityData}
+        color="rgb(255, 170, 0)"
+        unit={t("units.metersPerSecond")}
+        flex
+        minHeight={70}
+      />
+      <TelemetryChart
+        id="chart-third"
+        title={t("telemetry.pressure1", "Pressure 1")}
+        icon={<Gauge size={14} />}
+        data={pressureData}
+        color="rgb(51, 153, 255)"
+        unit={t("units.hectopascals", "hPa")}
+        flex
+        minHeight={70}
+      />
+    </>
+  );
+});
+
+const TeamChartsSection = React.memo(function TeamChartsSection({
+  activeStream,
+}: {
+  activeStream: "rocket" | "payload" | "drone";
+}) {
+  switch (activeStream) {
+    case "payload":
+      return <PayloadCharts />;
+    case "drone":
+      return <DroneCharts />;
+    case "rocket":
+    default:
+      return <RocketCharts />;
+  }
+});
 
 /**
  * Team Dashboard — Technical diagnostics view for the engineering team.
  *
- * Fully responsive across all display resolutions (1366x768, 1080p, 1440p, 4K).
- * Prevents UI compression by balancing column layout and flex parameters.
+ * Single-viewport layout (no scrolling anywhere):
+ * - Left rail: Connection, Drone Control, System Health + Drone Telemetry
+ * - Center column: Avionics/Payload summaries + Stream Switcher + 3 flexible-height charts
+ * - Right media column: Satellite Map + Payload Camera filling the viewport
  */
 export function TeamDashboardPage() {
   const { t } = useTranslation();
-  const altitudeData = useAppSelector(selectRocketAltitudeHistory);
-  const velocityData = useAppSelector(selectRocketVelocityHistory);
-  const pressureData = useAppSelector(selectRocketPressureHistory);
 
-  // Map pressure data to single-value chart format
-  const pressureChartData = pressureData.map((p) => ({ t: p.t, v: p.p1 }));
+  const rocketCount = useAppSelector(selectRocketPacketCount);
+  const payloadCount = useAppSelector(selectPayloadPacketCount);
+  const droneCount = useAppSelector(selectDronePacketCount);
+
+  const [streamSource, setStreamSource] = useState<"auto" | "rocket" | "payload" | "drone">("auto");
+
+  // Determine which stream to graph: auto-prioritizes active streams
+  const activeStream = useMemo<"rocket" | "payload" | "drone">(() => {
+    if (streamSource !== "auto") return streamSource;
+    if (rocketCount > 0) return "rocket";
+    if (payloadCount > 0) return "payload";
+    if (droneCount > 0) return "drone";
+    return "rocket";
+  }, [streamSource, rocketCount, payloadCount, droneCount]);
+
 
   return (
     <div
@@ -40,84 +212,143 @@ export function TeamDashboardPage() {
         flexDirection: "column",
         gap: "0.75rem",
         height: "100%",
+        minHeight: 0,
       }}
     >
-      {/* Page header */}
-      <h1
-        style={{
-          fontSize: "0.875rem",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--color-text-secondary)",
-          margin: 0,
-        }}
-      >
-        {t("dashboard.team.title")}
-      </h1>
-
       {/* Flight Timeline — full width */}
       <FlightTimeline />
 
-      {/* Main Grid: Responsive 3-column layout */}
+      {/* Main 3-pane layout: control rail | telemetry | media */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          display: "flex",
           gap: "0.75rem",
           flex: 1,
           minHeight: 0,
-          overflowY: "auto",
-          paddingRight: "0.25rem",
         }}
       >
-        {/* Column 1: Rocket Avionics + Charts */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, minHeight: 0, overflowY: "auto", paddingRight: "0.25rem" }}>
-          <AvionicsSummary />
-          <TelemetryChart
-            id="chart-altitude"
-            title={t("telemetry.altitude")}
-            icon={<Mountain size={14} />}
-            data={altitudeData}
-            color="rgb(0, 255, 136)"
-            unit={t("units.meters")}
-            height={160}
-          />
-          <TelemetryChart
-            id="chart-velocity"
-            title={t("telemetry.velocity")}
-            icon={<Zap size={14} />}
-            data={velocityData}
-            color="rgb(255, 170, 0)"
-            unit={t("units.metersPerSecond")}
-            height={160}
-          />
-        </div>
-
-        {/* Column 2: Payload + Pressure Chart + Map */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0, overflowY: "auto", paddingRight: "0.25rem" }}>
-          <PayloadSummary />
-          <TelemetryChart
-            id="chart-pressure"
-            title={t("telemetry.pressure1")}
-            icon={<Gauge size={14} />}
-            data={pressureChartData}
-            color="rgb(51, 153, 255)"
-            unit={t("units.hectopascals")}
-            height={160}
-          />
-          <TelemetryMap style={{ flex: 1, minHeight: 260 }} />
-        </div>
-
-        {/* Column 3: Connection + Drone Control + Health + Drone + Camera */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", minWidth: 300, flex: 1, minHeight: 0, overflowY: "auto", paddingRight: "0.25rem" }}>
+        {/* Left control rail — fixed width */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.75rem",
+            width: 260,
+            minWidth: 240,
+            minHeight: 0,
+            overflowY: "auto",
+            paddingRight: "0.25rem",
+            flexShrink: 0,
+          }}
+        >
           <ConnectionPanel />
           <DroneControl />
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-            <SystemHealth />
-            <DroneSummary />
+          <SystemHealth />
+          <DroneSummary />
+        </div>
+
+        {/* Center column — telemetry + charts, no scroll */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.75rem",
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "0.75rem",
+              flexShrink: 0,
+            }}
+          >
+            <AvionicsSummary />
+            <PayloadSummary />
           </div>
-          <CameraPanel style={{ flex: 1, minHeight: 260 }} />
+          {/* Stream Selector Toolbar */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0.25rem 0.5rem",
+              backgroundColor: "var(--color-bg-secondary)",
+              border: "1px solid var(--color-border-default)",
+              borderRadius: "0.25rem",
+              flexShrink: 0,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                fontSize: "0.6875rem",
+                fontFamily: "var(--font-mono)",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              <Radio size={12} style={{ color: "var(--color-status-nominal)" }} />
+              <span style={{ fontWeight: 600 }}>CHART STREAM:</span>
+              <span style={{ color: "var(--color-status-info)", fontWeight: 700 }}>
+                {activeStream.toUpperCase()} {streamSource === "auto" ? "(AUTO)" : ""}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.25rem" }}>
+              {(["auto", "rocket", "payload", "drone"] as const).map((source) => {
+                const isSelected = streamSource === source;
+                return (
+                  <button
+                    key={source}
+                    type="button"
+                    onClick={() => setStreamSource(source)}
+                    style={{
+                      padding: "0.15rem 0.5rem",
+                      fontSize: "0.625rem",
+                      fontWeight: 700,
+                      fontFamily: "var(--font-mono)",
+                      borderRadius: "0.2rem",
+                      border: isSelected
+                        ? "1px solid var(--color-status-info)"
+                        : "1px solid var(--color-border-default)",
+                      backgroundColor: isSelected
+                        ? "rgba(0, 200, 255, 0.15)"
+                        : "var(--color-bg-tertiary)",
+                      color: isSelected
+                        ? "var(--color-status-info)"
+                        : "var(--color-text-muted)",
+                      cursor: "pointer",
+                      transition: "all 150ms ease",
+                    }}
+                  >
+                    {t(`chartStream.${source}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <TeamChartsSection activeStream={activeStream} />
+        </div>
+
+        {/* Right media column — map + camera, no scroll */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.75rem",
+            flex: 1,
+            minWidth: 320,
+            minHeight: 0,
+          }}
+        >
+          <TelemetryMap style={{ flex: 1, minHeight: 0 }} />
+          <CameraPanel style={{ flex: 1, minHeight: 0, maxHeight: "48%" }} />
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 //! Telemetry Packet — unified ASCII CSV parser for Rocket, Payload, and Drone streams.
 //!
-//! Layout (AA / BB — 25 fields):
+//! Layout (AA — 25 fields):
 //! 0: Header ("AA", "BB", "CC")
 //! 1: timestamp_ms (u32)
 //! 2-4: accel_x, accel_y, accel_z (f32)
@@ -18,14 +18,22 @@
 //! 21: gps_course (f32)
 //! 22-24: roll, pitch, yaw (f32)
 //!
-//! Drone (CC) appends 7 flight-control fields (32 total):
-//! 25: rel_alt (f32)         — relative altitude above takeoff (m)
-//! 26: vertical_velocity (f32) — climb rate (m/s, + up)
-//! 27: g_force (f32)         — G-loading (g)
-//! 28: dpdt (f32)            — pressure change rate (hPa/s)
-//! 29: armed (0/1)           — RF ARM command state
-//! 30: state_code (u8)       — 0=DISARMED, 1=ARMED, 2=MOTORS_ON
-//! 31: throttle_us (u16)     — ESC pulse width (1000..2000 us)
+//! Payload (BB) and Drone (CC) append 7 fields (32 total).
+//! Shared fields 25-28:
+//! 25: rel_alt (f32)            — relative altitude above takeoff (m)
+//! 26: vertical_velocity (f32)  — climb rate (m/s, + up)
+//! 27: g_force (f32)            — G-loading (g)
+//! 28: dpdt (f32)               — pressure change rate (hPa/s)
+//!
+//! Drone (CC) fields 29-31:
+//! 29: armed (0/1)              — RF ARM command state
+//! 30: state_code (u8)          — 0=DISARMED, 1=ARMED, 2=MOTORS_ON
+//! 31: throttle_us (u16)        — ESC pulse width (1000..2000 us)
+//!
+//! Payload (BB) fields 29-31:
+//! 29: on_ground (0/1)          — 0=payload in sky, 1=payload landed
+//! 30: flight_phase (u8)        — 0=PRE_LAUNCH, 1=IN_AIR, 2=ON_GROUND
+//! 31: reserved (0)             — throttle placeholder
 
 use serde::{Deserialize, Serialize};
 use crate::protocol::rocket_packet::FlightState;
@@ -63,7 +71,7 @@ pub struct TelemetryPacket {
     pub primary_parachute_deployed: bool,
     pub secondary_parachute_deployed: bool,
 
-    // Drone flight-control fields (CC only, zero for AA/BB)
+    // Shared BB/CC extension fields (zero for AA)
     #[serde(default)]
     pub rel_alt: f32,
     #[serde(default)]
@@ -72,12 +80,32 @@ pub struct TelemetryPacket {
     pub g_force: f32,
     #[serde(default)]
     pub dpdt: f32,
+
+    // Drone flight-control fields (CC only)
     #[serde(default)]
     pub armed: bool,
     #[serde(default)]
     pub state_code: u8,
     #[serde(default)]
     pub throttle_us: u16,
+
+    // Payload status fields (BB only)
+    #[serde(default)]
+    pub on_ground: bool,
+    #[serde(default)]
+    pub flight_phase: u8,
+
+    // Firmware fast_g and actuator output state
+    #[serde(default)]
+    pub fast_g: f32,
+    #[serde(default)]
+    pub outputs_active: bool,
+
+    // Rocket STM32 status fields (AA only)
+    #[serde(default)]
+    pub bno_calib: u8,
+    #[serde(default)]
+    pub flags: u8,
 }
 
 impl TelemetryPacket {
@@ -132,28 +160,37 @@ impl TelemetryPacket {
         let pitch = parse_f32(parts[23]);
         let yaw = parse_f32(parts[24]);
 
-        // Drone (CC) flight-control extension: 7 extra fields
-        let (rel_alt, vertical_velocity, g_force, dpdt, armed, state_code, throttle_us) =
-            if header == "CC" && parts.len() >= 32 {
-                let rel_alt = parse_f32(parts[25]);
-                let vertical_velocity = parse_f32(parts[26]);
-                let g_force = parse_f32(parts[27]);
-                let dpdt = parse_f32(parts[28]);
-                let armed = parts[29].trim() == "1";
-                let state_code = parts[30].trim().parse::<u8>().unwrap_or(0);
-                let throttle_us = parts[31].trim().parse::<u16>().unwrap_or(0);
+        // Shared BB/CC extension: fields 25-28
+        let (rel_alt, vertical_velocity, g_force, dpdt) =
+            if (header == "CC" || header == "BB") && parts.len() >= 32 {
                 (
-                    rel_alt,
-                    vertical_velocity,
-                    g_force,
-                    dpdt,
-                    armed,
-                    state_code,
-                    throttle_us,
+                    parse_f32(parts[25]),
+                    parse_f32(parts[26]),
+                    parse_f32(parts[27]),
+                    parse_f32(parts[28]),
                 )
             } else {
-                (0.0, 0.0, 0.0, 0.0, false, 0, 0)
+                (0.0, 0.0, 0.0, 0.0)
             };
+
+        // Drone (CC) flight-control extension: fields 29-31
+        let (armed, state_code, throttle_us) = if header == "CC" && parts.len() >= 32 {
+            let armed = parts[29].trim() == "1";
+            let state_code = parts[30].trim().parse::<u8>().unwrap_or(0);
+            let throttle_us = parts[31].trim().parse::<u16>().unwrap_or(0);
+            (armed, state_code, throttle_us)
+        } else {
+            (false, 0, 0)
+        };
+
+        // Payload (BB) status extension: fields 29-31
+        let (on_ground, flight_phase) = if header == "BB" && parts.len() >= 32 {
+            let on_ground = parts[29].trim() == "1";
+            let flight_phase = parts[30].trim().parse::<u8>().unwrap_or(0);
+            (on_ground, flight_phase)
+        } else {
+            (false, 0)
+        };
 
         Some(Self {
             header,
@@ -191,6 +228,12 @@ impl TelemetryPacket {
             armed,
             state_code,
             throttle_us,
+            on_ground,
+            flight_phase,
+            fast_g: 0.0,
+            outputs_active: false,
+            bno_calib: 0,
+            flags: 0,
         })
     }
 
@@ -228,7 +271,7 @@ impl TelemetryPacket {
             format_f32(self.yaw, 2)
         );
 
-        // Drone (CC) flight-control extension
+        // Payload (BB) / Drone (CC) extension: shared + per-header fields
         if self.header == "CC" {
             line.push_str(&format!(
                 ",{},{},{},{},{},{},{}",
@@ -239,6 +282,16 @@ impl TelemetryPacket {
                 if self.armed { 1 } else { 0 },
                 self.state_code,
                 self.throttle_us,
+            ));
+        } else if self.header == "BB" {
+            line.push_str(&format!(
+                ",{},{},{},{},{},{},0",
+                format_f32(self.rel_alt, 2),
+                format_f32(self.vertical_velocity, 2),
+                format_f32(self.g_force, 3),
+                format_f32(self.dpdt, 3),
+                if self.on_ground { 1 } else { 0 },
+                self.flight_phase,
             ));
         }
 

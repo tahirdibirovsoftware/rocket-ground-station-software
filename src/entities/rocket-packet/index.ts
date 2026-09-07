@@ -1,6 +1,7 @@
 export {
   rocketTelemetrySlice,
   rocketPacketReceived,
+  rocketPacketsReceived,
   rocketTelemetryReset,
   type RocketTelemetryState,
 } from "./model/rocketTelemetrySlice";

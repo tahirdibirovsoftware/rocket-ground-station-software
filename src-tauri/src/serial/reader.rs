@@ -1,9 +1,17 @@
 //! Serial port reader — byte-level framing and packet extraction.
 //!
-//! The reader scans an incoming byte stream for line endings ('\n'),
-//! extracts lines starting with "AA,", "BB,", or "CC,", parses them as CSV,
-//! and runs a flight state estimator on the Rocket ("AA") packets.
+//! The reader supports two coexisting protocols on the same RF stream:
+//! - Legacy ASCII CSV lines starting with "AA,", "BB," or "CC," terminated by '\n'
+//! - New binary frames: `AA 55 <12-byte header> <payload> <crc16>` (see
+//!   `crate::protocol::binary_packet`)
+//!
+//! Bare "1"/"0" lines are treated as uplink command ACKs / payload
+//! sky-landed status. Rocket ("AA") packets run a flight state estimator.
 
+use crate::protocol::binary_packet::{
+    self, DEVICE_DRONE, DEVICE_PAYLOAD, MAX_FRAME_SIZE, PKT_STATUS, PKT_TELEMETRY,
+    ROCKET_FRAME_SIZE, ROCKET_PAYLOAD_LEN, ROCKET_TYPE_TELEM, SYNC1, SYNC2,
+};
 use crate::protocol::telemetry_packet::TelemetryPacket;
 use crate::protocol::rocket_packet::FlightState;
 
@@ -13,6 +21,18 @@ pub enum ParsedPacket {
     Rocket(TelemetryPacket),
     Payload(TelemetryPacket),
     Drone(TelemetryPacket),
+    /// Payload status event (binary RF_PKT_STATUS): on_ground flag + flight phase + outputs_active.
+    PayloadStatus {
+        on_ground: bool,
+        flight_phase: u8,
+        outputs_active: bool,
+    },
+    /// Drone status event (binary RF_PKT_STATUS): state code, throttle, armed flag.
+    DroneStatus {
+        state_code: u8,
+        throttle_us: u16,
+        armed: bool,
+    },
 }
 
 /// Statistics tracked by the frame parser.
@@ -30,11 +50,15 @@ pub struct ReaderStats {
     pub last_uplink_ack: Option<bool>,
 }
 
-/// State machine for extracting framed CSV packets from a raw byte stream.
+/// State machine for extracting framed packets from a raw byte stream.
 #[derive(Debug)]
 pub struct FrameParser {
     /// Internal buffer for accumulating line bytes.
     buffer: Vec<u8>,
+    /// Buffer for accumulating a binary frame.
+    bin_buf: Vec<u8>,
+    /// Expected total binary frame length once the header is known.
+    bin_expected: Option<usize>,
     /// Cumulative statistics.
     pub stats: ReaderStats,
 
@@ -52,6 +76,8 @@ impl FrameParser {
     pub fn new() -> Self {
         Self {
             buffer: Vec::with_capacity(256),
+            bin_buf: Vec::with_capacity(MAX_FRAME_SIZE),
+            bin_expected: None,
             stats: ReaderStats::default(),
             max_altitude: 0.0,
             last_altitude: 0.0,
@@ -69,46 +95,205 @@ impl FrameParser {
         for &byte in data {
             self.stats.bytes_processed += 1;
 
-            if byte == b'\n' {
-                let mut start_idx = None;
-                for header in &[b"AA,", b"BB,", b"CC,"] {
-                    if let Some(pos) = self.buffer.windows(3).position(|w| w == *header) {
-                        if start_idx.is_none() || pos < start_idx.unwrap() {
-                            start_idx = Some(pos);
-                        }
-                    }
-                }
-
-                if let Some(idx) = start_idx {
-                    if let Ok(line_str) = std::str::from_utf8(&self.buffer[idx..]) {
-                        let line_owned = line_str.to_string();
-                        if let Some(pkt) = self.parse_line(&line_owned) {
-                            packets.push(pkt);
-                        }
-                    }
-                } else if self.buffer.len() <= 3 {
-                    // Uplink command ACK from the drone flight controller:
-                    // echoes a bare "1" (ARM) or "0" (DISARM) line over the RF link.
-                    let line = std::str::from_utf8(&self.buffer).unwrap_or("");
-                    let trimmed = line.trim();
-                    if trimmed == "1" || trimmed == "0" {
-                        self.stats.uplink_acks += 1;
-                        self.stats.last_uplink_ack = Some(trimmed == "1");
-                    }
-                }
-                self.buffer.clear();
+            if !self.bin_buf.is_empty() || byte == SYNC1 {
+                self.feed_binary_byte(byte, &mut packets);
             } else {
-                // Prevent buffer from growing indefinitely on raw garbage streams
-                if self.buffer.len() < 1024 {
-                    self.buffer.push(byte);
-                } else {
-                    self.buffer.clear();
-                    self.stats.framing_errors += 1;
-                }
+                self.feed_line_byte(byte, &mut packets);
             }
         }
 
         packets
+    }
+
+    /// Process a byte for the binary frame state machine.
+    fn feed_binary_byte(&mut self, byte: u8, packets: &mut Vec<ParsedPacket>) {
+        if self.bin_buf.is_empty() {
+            // Only enter binary mode on the sync byte
+            if byte != SYNC1 {
+                self.feed_line_byte(byte, packets);
+                return;
+            }
+            self.bin_buf.push(byte);
+            return;
+        }
+
+        self.bin_buf.push(byte);
+
+        // Validate the second sync byte
+        if self.bin_buf.len() == 2 && self.bin_buf[1] != SYNC2 {
+            // Not a binary frame — replay the buffered bytes as line bytes
+            let stray = std::mem::take(&mut self.bin_buf);
+            self.bin_expected = None;
+            for b in stray {
+                self.feed_line_byte(b, packets);
+            }
+            return;
+        }
+
+        // Compute the expected total length based on frame type
+        if self.bin_expected.is_none() {
+            if self.bin_buf.len() >= 4
+                && self.bin_buf[2] == ROCKET_TYPE_TELEM
+                && self.bin_buf[3] == ROCKET_PAYLOAD_LEN as u8
+            {
+                // STM32 Rocket Frame: [0xAA, 0x55, 0x01, 55, ... 55 payload ..., crc16] = 61 bytes
+                self.bin_expected = Some(ROCKET_FRAME_SIZE);
+            } else if self.bin_buf.len() >= 12 {
+                // Teensy Frame: [0xAA, 0x55, proto, device_id, type, seq (2), ms (4), payload_len, ...]
+                let payload_len = self.bin_buf[11] as usize;
+                let total = 12 + payload_len + 2;
+                if total > MAX_FRAME_SIZE {
+                    // Corrupt length field — drop and resync
+                    self.bin_buf.clear();
+                    self.bin_expected = None;
+                    self.stats.framing_errors += 1;
+                    return;
+                }
+                self.bin_expected = Some(total);
+            }
+        }
+
+        // Wait for a complete frame
+        if let Some(expected) = self.bin_expected {
+            if self.bin_buf.len() >= expected {
+                let frame_bytes = std::mem::take(&mut self.bin_buf);
+                self.bin_expected = None;
+                self.handle_binary_frame(&frame_bytes, packets);
+            }
+        }
+    }
+
+    /// Parse a complete binary frame and emit derived packets.
+    fn handle_binary_frame(&mut self, bytes: &[u8], packets: &mut Vec<ParsedPacket>) {
+        if bytes.len() == ROCKET_FRAME_SIZE
+            && bytes[0] == SYNC1
+            && bytes[1] == SYNC2
+            && bytes[2] == ROCKET_TYPE_TELEM
+            && bytes[3] == ROCKET_PAYLOAD_LEN as u8
+        {
+            match binary_packet::parse_rocket_frame(bytes) {
+                Ok(rkt) => {
+                    self.stats.rocket_packets += 1;
+                    packets.push(ParsedPacket::Rocket(rkt));
+                }
+                Err(binary_packet::FrameError::CrcMismatch { .. }) => {
+                    self.stats.checksum_failures += 1;
+                }
+                Err(_) => {
+                    self.stats.framing_errors += 1;
+                }
+            }
+            return;
+        }
+
+        match binary_packet::parse_frame(bytes) {
+            Ok(frame) => match frame.packet_type {
+                PKT_TELEMETRY => {
+                    let pkt = binary_packet::parse_telemetry_payload(
+                        frame.device_id,
+                        frame.timestamp_ms,
+                        &frame.payload,
+                    );
+                    match (frame.device_id, pkt) {
+                        (DEVICE_PAYLOAD, Some(pkt)) => {
+                            self.stats.payload_packets += 1;
+                            packets.push(ParsedPacket::Payload(pkt));
+                        }
+                        (DEVICE_DRONE, Some(pkt)) => {
+                            self.stats.drone_packets += 1;
+                            packets.push(ParsedPacket::Drone(pkt));
+                        }
+                        _ => {
+                            self.stats.framing_errors += 1;
+                        }
+                    }
+                }
+                PKT_STATUS => match frame.device_id {
+                    DEVICE_PAYLOAD => {
+                        if let Some((on_ground, flight_phase, outputs_active)) =
+                            binary_packet::parse_payload_status_payload(&frame.payload)
+                        {
+                            packets.push(ParsedPacket::PayloadStatus {
+                                on_ground,
+                                flight_phase,
+                                outputs_active,
+                            });
+                        }
+                    }
+                    DEVICE_DRONE => {
+                        if let Some((state_code, throttle_us, armed)) =
+                            binary_packet::parse_drone_status_payload(&frame.payload)
+                        {
+                            packets.push(ParsedPacket::DroneStatus {
+                                state_code,
+                                throttle_us,
+                                armed,
+                            });
+                        }
+                    }
+                    _ => {
+                        self.stats.framing_errors += 1;
+                    }
+                },
+                _ => {
+                    self.stats.framing_errors += 1;
+                }
+            },
+            Err(binary_packet::FrameError::CrcMismatch { .. }) => {
+                self.stats.checksum_failures += 1;
+            }
+            Err(_) => {
+                self.stats.framing_errors += 1;
+            }
+        }
+    }
+
+    /// Process a byte for the ASCII line protocol.
+    fn feed_line_byte(&mut self, byte: u8, packets: &mut Vec<ParsedPacket>) {
+        if byte == b'\n' {
+            let mut start_idx = None;
+            for header in &[b"AA,", b"BB,", b"CC,"] {
+                if let Some(pos) = self.buffer.windows(3).position(|w| w == *header) {
+                    if start_idx.is_none() || pos < start_idx.unwrap() {
+                        start_idx = Some(pos);
+                    }
+                }
+            }
+
+            if let Some(idx) = start_idx {
+                if let Ok(line_str) = std::str::from_utf8(&self.buffer[idx..]) {
+                    let line_owned = line_str.to_string();
+                    if let Some(pkt) = self.parse_line(&line_owned) {
+                        packets.push(pkt);
+                    }
+                }
+            } else {
+                // Uplink command ACKs:
+                // - drone (binary firmware): "ACK_ARM" / "ACK_DISARM" lines
+                // - payload (CSV firmware): bare "1" (landed/ARM) / "0" (sky/DISARM) lines
+                let line = std::str::from_utf8(&self.buffer).unwrap_or("");
+                let trimmed = line.trim();
+                if trimmed == "ACK_ARM" {
+                    self.stats.uplink_acks += 1;
+                    self.stats.last_uplink_ack = Some(true);
+                } else if trimmed == "ACK_DISARM" {
+                    self.stats.uplink_acks += 1;
+                    self.stats.last_uplink_ack = Some(false);
+                } else if self.buffer.len() <= 3 && (trimmed == "1" || trimmed == "0") {
+                    self.stats.uplink_acks += 1;
+                    self.stats.last_uplink_ack = Some(trimmed == "1");
+                }
+            }
+            self.buffer.clear();
+        } else {
+            // Prevent buffer from growing indefinitely on raw garbage streams
+            if self.buffer.len() < 1024 {
+                self.buffer.push(byte);
+            } else {
+                self.buffer.clear();
+                self.stats.framing_errors += 1;
+            }
+        }
     }
 
     /// Attempt to parse a line and identify the packet.
@@ -228,6 +413,8 @@ impl FrameParser {
     /// Reset the parser state.
     pub fn reset(&mut self) {
         self.buffer.clear();
+        self.bin_buf.clear();
+        self.bin_expected = None;
         self.max_altitude = 0.0;
         self.last_altitude = 0.0;
         self.last_timestamp_ms = 0;

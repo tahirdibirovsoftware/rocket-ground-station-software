@@ -2,16 +2,16 @@
  * useRocketTelemetry — Hook for receiving rocket avionics telemetry.
  *
  * Listens to the "rocket-telemetry" Tauri event and dispatches
- * the parsed packet to a callback.
+ * the raw snake_case packet to a callback (map to camelCase first).
  */
 import { IPC_EVENTS } from "@shared/config/constants";
-import type { TelemetryPacket } from "@shared/types";
+import type { RawTelemetryPacket } from "@shared/lib";
 import { useTauriEvent } from "./useTauriEvent";
 
 export function useRocketTelemetry(
-  onPacket: (packet: TelemetryPacket) => void,
+  onPacket: (packet: RawTelemetryPacket) => void,
 ) {
-  useTauriEvent<TelemetryPacket>(
+  useTauriEvent<RawTelemetryPacket>(
     IPC_EVENTS.ROCKET_TELEMETRY,
     onPacket,
   );

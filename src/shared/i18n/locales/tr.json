@@ -39,6 +39,8 @@
   },
   "telemetry": {
     "altitude": "Yukseklik",
+    "relativeAltitude": "Irtifa (AGL)",
+    "mslAltitude": "MSL Irtifasi (Deniz)",
     "velocity": "Hiz",
     "pressure1": "Basinc 1",
     "pressure2": "Basinc 2",
@@ -58,6 +60,31 @@
     "milliseconds": "ms",
     "hertz": "Hz"
   },
+  "avionics": {
+    "title": "Roket Aviyonik (AA)",
+    "standby": "BEKLEMEDE",
+    "awaitingSignal": "BEKLEMEDE - SİNYAL BEKLENİYOR (AA)",
+    "bnoCalib": "BNO Kalib.",
+    "calibrated": "TAM (3/3)",
+    "drogueChute": "Fren Paraşütü (Apoje)",
+    "mainChute": "Ana Paraşüt (500m)"
+  },
+  "chartStream": {
+    "auto": "OTOMATİK",
+    "rocket": "ROKET (AA)",
+    "payload": "FAYDALI YÜK (BB)",
+    "drone": "DRONE (CC)",
+    "noData": "AKTİF TELEMETRİ YOK"
+  },
+  "mapHud": {
+    "gpsLocked": "3B KİLİT",
+    "indoorsNoFix": "İÇ MEKAN (0 UYDU)",
+    "noSignal": "SİNYAL YOK",
+    "focusRocket": "Roket",
+    "focusPayload": "Faydalı Yük",
+    "focusDrone": "Drone",
+    "fitAll": "Tümünü Sığdır"
+  },
   "droneControl": {
     "title": "Drone Motor Kontrolü",
     "state": "Uçuş Durumu",
@@ -68,11 +95,13 @@
     "stateDisabled": "PASİF",
     "stateArmed": "AKTİF",
     "stateMotorsOn": "MOTORLAR AÇIK",
+    "stateMotorsHold": "MOTORLAR BEKLEMEDE",
+    "stateTouchdown": "İNİŞ TAMAM",
     "unknownState": "KOD {{code}}",
-    "ackLabel": "KOMUT ONAYI: {{state}} ({{count}} alındı)",
+    "echoLabel": "UPLINK YANKISI: {{state}} ({{count}} alındı)",
     "ackArmed": "AKTİF",
     "ackDisarmed": "PASİF",
-    "ackWaiting": "KOMUT ONAYI: BEKLENİYOR (drone durum değişikliğinden sonra '1'/'0' yansıtır)",
+    "ackWaiting": "UPLINK YANKISI: BEKLENİYOR (drone '1'/'0' onayı veya yük gökte/yerde durumu)",
     "ackMock": "SİMÜLE ONAY: komutlar sanal drone'a uygulandı",
     "armEngine": "MOTORU AKTİF ET",
     "disarmEngine": "MOTORU PASİF ET",
@@ -86,7 +115,27 @@
     "climbRate": "Tırmanma Hızı",
     "relativeAltitude": "Bağıl Yükseklik",
     "gForce": "G Kuvveti",
+    "fastG": "Hızlı G Filtresi",
+    "outputStatus": "Çıkış Durumu",
+    "outputActive": "AKTİF (1480 µs / Durgun)",
+    "outputInactive": "KESİLDİ (1000 µs / Hareket)",
     "course": "Drone Rotası"
+  },
+  "dronePhase": {
+    "preLaunch": "FIRLATMA ÖNCESİ",
+    "inAir": "UÇUŞTA",
+    "onGround": "YERDE (İNDİ)"
+  },
+  "payloadPhase": {
+    "preLaunch": "FIRLATMA ÖNCESİ",
+    "inAir": "GÖKTE",
+    "onGround": "YERDE",
+    "skyStatus": "GÖKTE",
+    "landedStatus": "İNDİ",
+    "buzzerActive": "AKTİF (Buzzer/ESC Çalışıyor)",
+    "buzzerCutoff": "KESİLDİ (Hareket / G-Kuvveti)",
+    "fastG": "Hızlı-G Filtresi",
+    "outputs": "Aktüatör Çıkışı"
   },
   "dashboard": {
     "team": {
