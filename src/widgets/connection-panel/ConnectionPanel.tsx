@@ -4,7 +4,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Plug, Unplug, Play, Square, RotateCcw, AlertCircle } from "lucide-react";
+import { Plug, Unplug, AlertCircle } from "lucide-react";
 import { IPC_COMMANDS } from "@shared/config/constants";
 import { PanelContainer, StatusIndicator } from "@shared/ui";
 import { useAppSelector, useAppDispatch } from "@app/store";
@@ -83,30 +83,6 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
     }
   }, [dispatch, rfdConnected, rfdPortInput, rfdBaud]);
 
-  const handleStartMock = useCallback(async () => {
-    dispatch(connectionLoading());
-    try {
-      await invoke(IPC_COMMANDS.START_MOCK);
-    } catch (e) {
-      dispatch(connectionError(String(e)));
-    }
-  }, [dispatch]);
-
-  const handleStopMock = useCallback(async () => {
-    try {
-      await invoke(IPC_COMMANDS.STOP_MOCK);
-    } catch (e) {
-      dispatch(connectionError(String(e)));
-    }
-  }, [dispatch]);
-
-  const handleResetMock = useCallback(async () => {
-    try {
-      await invoke(IPC_COMMANDS.RESET_MOCK);
-    } catch (e) {
-      dispatch(connectionError(String(e)));
-    }
-  }, [dispatch]);
 
   const statusVariant =
     connState.mode === "disconnected" ? "muted" : isMock ? "info" : "nominal";
@@ -149,7 +125,6 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
         {/* Global Controls */}
         <div style={{ 
           display: "flex", 
-          justifyContent: "space-between", 
           alignItems: "center",
           borderBottom: "1px solid var(--color-border-default)",
           paddingBottom: "0.75rem",
@@ -158,12 +133,13 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
               <button
                 style={{
                   ...buttonStyle,
+                  width: "100%",
+                  justifyContent: "center",
                   backgroundColor: "rgba(0, 255, 136, 0.1)",
                   color: "var(--color-status-nominal)",
                   borderColor: "var(--color-status-nominal)",
                 }}
                 onClick={handleGlobalToggle}
-                disabled={isMock}
               >
                 <Plug size={12} /> CONNECT RFD
               </button>
@@ -171,6 +147,8 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
               <button
                 style={{
                   ...buttonStyle,
+                  width: "100%",
+                  justifyContent: "center",
                   backgroundColor: "rgba(255, 51, 102, 0.1)",
                   color: "var(--color-status-critical)",
                   borderColor: "var(--color-status-critical)",
@@ -180,18 +158,6 @@ export const ConnectionPanel = React.memo(function ConnectionPanel() {
                 <Unplug size={12} /> DISCONNECT RFD
               </button>
           )}
-
-          <div style={{ display: "flex", gap: "0.375rem" }}>
-             <button style={mockButtonStyle} onClick={handleStartMock} disabled={anyConnected || isMock}>
-               <Play size={12} /> START MOCK
-             </button>
-             <button style={mockButtonStyle} onClick={handleStopMock} disabled={!isMock}>
-               <Square size={12} /> STOP
-             </button>
-             <button style={mockButtonStyle} onClick={handleResetMock}>
-               <RotateCcw size={12} />
-             </button>
-          </div>
         </div>
 
         {/* RFD Receiver Card */}
@@ -286,12 +252,6 @@ const disconnectBtnStyle: React.CSSProperties = {
   borderColor: "rgba(255, 51, 102, 0.3)",
 };
 
-const mockButtonStyle: React.CSSProperties = {
-  ...buttonStyle,
-  backgroundColor: "var(--color-bg-tertiary)",
-  color: "var(--color-text-secondary)",
-  padding: "0.375rem 0.5rem",
-};
 
 const errorBannerStyle: React.CSSProperties = {
   backgroundColor: "rgba(255, 51, 102, 0.1)",
