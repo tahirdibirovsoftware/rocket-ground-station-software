@@ -9,10 +9,11 @@ import { useTranslation } from "react-i18next";
 import { Timer } from "lucide-react";
 import { PanelContainer } from "@shared/ui";
 import { useAppSelector } from "@app/store";
-import { selectLatestRocketPacket } from "@entities/rocket-packet";
-import { FlightState } from "@shared/types";
+import { selectLatestRocketPacket, selectRocketPacketCount } from "@entities/rocket-packet";
+import { selectLatestDronePacket, selectDronePacketCount } from "@entities/drone-packet";
+import { FlightState, DroneFlightState } from "@shared/types";
 
-const PHASES: { state: FlightState; key: string }[] = [
+const ROCKET_PHASES: { state: FlightState; key: string }[] = [
   { state: FlightState.Pad, key: "flightState.pad" },
   { state: FlightState.Powered, key: "flightState.powered" },
   { state: FlightState.Unpowered, key: "flightState.unpowered" },
@@ -21,7 +22,7 @@ const PHASES: { state: FlightState; key: string }[] = [
   { state: FlightState.SecondaryChute, key: "flightState.secondaryChute" },
 ];
 
-const PHASE_COLORS: Record<number, string> = {
+const ROCKET_PHASE_COLORS: Record<number, string> = {
   [FlightState.Pad]: "var(--color-status-muted)",
   [FlightState.Powered]: "var(--color-status-warning)",
   [FlightState.Unpowered]: "var(--color-status-info)",
@@ -30,16 +31,47 @@ const PHASE_COLORS: Record<number, string> = {
   [FlightState.SecondaryChute]: "var(--color-status-critical)",
 };
 
-export const FlightTimeline = React.memo(function FlightTimeline() {
+const DRONE_PHASES: { state: DroneFlightState; key: string }[] = [
+  { state: DroneFlightState.Standby, key: "droneFlightState.standby" },
+  { state: DroneFlightState.Launched, key: "droneFlightState.launched" },
+  { state: DroneFlightState.Descending, key: "droneFlightState.descending" },
+  { state: DroneFlightState.Landed, key: "droneFlightState.landed" },
+];
+
+const DRONE_PHASE_COLORS: Record<number, string> = {
+  [DroneFlightState.Standby]: "var(--color-status-muted)",
+  [DroneFlightState.Launched]: "var(--color-status-warning)",
+  [DroneFlightState.Descending]: "var(--color-status-nominal)",
+  [DroneFlightState.Landed]: "var(--color-status-info)",
+};
+
+interface FlightTimelineProps {
+  activeStream?: "rocket" | "payload" | "drone";
+}
+
+export const FlightTimeline = React.memo(function FlightTimeline({
+  activeStream,
+}: FlightTimelineProps) {
   const { t } = useTranslation();
-  const latest = useAppSelector(selectLatestRocketPacket);
-  const hasSignal = latest !== null;
-  const currentState = latest?.flightState ?? null;
+  const latestRocket = useAppSelector(selectLatestRocketPacket);
+  const latestDrone = useAppSelector(selectLatestDronePacket);
+  const rocketCount = useAppSelector(selectRocketPacketCount);
+  const droneCount = useAppSelector(selectDronePacketCount);
+
+  const isDroneMode = activeStream === "drone" || (activeStream !== "rocket" && droneCount > 0 && rocketCount === 0);
+
+  const hasSignal = isDroneMode ? latestDrone !== null : latestRocket !== null;
+  const currentState = isDroneMode
+    ? (latestDrone?.stateCode ?? null)
+    : (latestRocket?.flightState ?? null);
+
+  const phases = isDroneMode ? DRONE_PHASES : ROCKET_PHASES;
+  const colors = isDroneMode ? DRONE_PHASE_COLORS : ROCKET_PHASE_COLORS;
 
   return (
     <PanelContainer
       id="flight-timeline"
-      title={t("app.flightTimeline", "Flight Timeline")}
+      title={isDroneMode ? t("app.droneFlightTimeline", "Drone Flight Timeline") : t("app.flightTimeline", "Flight Timeline")}
       icon={<Timer size={14} />}
       headerRight={
         <span
@@ -51,9 +83,13 @@ export const FlightTimeline = React.memo(function FlightTimeline() {
             letterSpacing: "0.05em",
           }}
         >
-          {hasSignal
-            ? "ROCKET (AA) ACTIVE"
-            : t("avionics.awaitingSignal", "STANDBY - AWAITING SIGNAL (AA)")}
+          {isDroneMode
+            ? hasSignal
+              ? "DRONE (CC) ACTIVE"
+              : t("avionics.awaitingSignalDrone", "STANDBY - AWAITING SIGNAL (CC)")
+            : hasSignal
+              ? "ROCKET (AA) ACTIVE"
+              : t("avionics.awaitingSignal", "STANDBY - AWAITING SIGNAL (AA)")}
         </span>
       }
     >
@@ -64,10 +100,10 @@ export const FlightTimeline = React.memo(function FlightTimeline() {
           width: "100%",
         }}
       >
-        {PHASES.map(({ state, key }) => {
-          const isCurrent = hasSignal && state === currentState;
+        {phases.map(({ state, key }) => {
+          const isCurrent = hasSignal && (state === currentState || (isDroneMode && state === DroneFlightState.Landed && currentState === 4));
           const isPast = hasSignal && currentState !== null && state < currentState;
-          const color = PHASE_COLORS[state];
+          const color = colors[state];
 
           return (
             <div

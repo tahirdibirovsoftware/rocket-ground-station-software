@@ -398,6 +398,7 @@ fn drone_arm_override_applied_to_generated_packets() {
     assert!(!pkt.armed, "ground DISARM command should override auto-arm");
     assert_eq!(pkt.state_code, 0);
     assert_eq!(pkt.throttle_us, 1000);
+    assert_eq!(pkt.esc2_us, 1000);
 
     // Ground-commanded ARM before the auto-arm window
     let armed = gen.generate_tick_with_arm(5, Some(true));
@@ -411,6 +412,23 @@ fn drone_arm_override_applied_to_generated_packets() {
     let csv_str = std::str::from_utf8(armed_drone).unwrap();
     let pkt = TelemetryPacket::parse(csv_str).expect("drone packet should parse");
     assert!(pkt.armed, "ground ARM command should override auto-disarm");
+}
+
+#[test]
+fn drone_dual_esc_csv_round_trip() {
+    let mock = MockGenerator::with_defaults();
+    let bytes = match mock.generate_drone_bytes(55.0).unwrap() {
+        MockPacket::Drone(b) => b,
+        _ => unreachable!(),
+    };
+    let csv_str = std::str::from_utf8(&bytes).unwrap();
+    let mut pkt = TelemetryPacket::parse(csv_str).expect("CSV should parse");
+    pkt.throttle_us = 1650;
+    pkt.esc2_us = 1000;
+    let csv = pkt.to_csv_string();
+    let parsed = TelemetryPacket::parse(&csv).expect("CSV with dual ESC should parse");
+    assert_eq!(parsed.throttle_us, 1650);
+    assert_eq!(parsed.esc2_us, 1000);
 }
 
 #[test]

@@ -88,6 +88,8 @@ pub struct TelemetryPacket {
     pub state_code: u8,
     #[serde(default)]
     pub throttle_us: u16,
+    #[serde(default)]
+    pub esc2_us: u16,
 
     // Payload status fields (BB only)
     #[serde(default)]
@@ -173,14 +175,18 @@ impl TelemetryPacket {
                 (0.0, 0.0, 0.0, 0.0)
             };
 
-        // Drone (CC) flight-control extension: fields 29-31
-        let (armed, state_code, throttle_us) = if header == "CC" && parts.len() >= 32 {
+        // Drone (CC) status extension: fields 29-32
+        let (armed, state_code, throttle_us, esc2_us) = if header == "CC" && parts.len() >= 32 {
             let armed = parts[29].trim() == "1";
             let state_code = parts[30].trim().parse::<u8>().unwrap_or(0);
             let throttle_us = parts[31].trim().parse::<u16>().unwrap_or(0);
-            (armed, state_code, throttle_us)
+            let esc2_us = parts
+                .get(32)
+                .and_then(|s| s.trim().parse::<u16>().ok())
+                .unwrap_or(throttle_us);
+            (armed, state_code, throttle_us, esc2_us)
         } else {
-            (false, 0, 0)
+            (false, 0, 0, 0)
         };
 
         // Payload (BB) status extension: fields 29-31
@@ -228,6 +234,7 @@ impl TelemetryPacket {
             armed,
             state_code,
             throttle_us,
+            esc2_us,
             on_ground,
             flight_phase,
             fast_g: 0.0,
@@ -274,7 +281,7 @@ impl TelemetryPacket {
         // Payload (BB) / Drone (CC) extension: shared + per-header fields
         if self.header == "CC" {
             line.push_str(&format!(
-                ",{},{},{},{},{},{},{}",
+                ",{},{},{},{},{},{},{},{}",
                 format_f32(self.rel_alt, 2),
                 format_f32(self.vertical_velocity, 2),
                 format_f32(self.g_force, 3),
@@ -282,6 +289,7 @@ impl TelemetryPacket {
                 if self.armed { 1 } else { 0 },
                 self.state_code,
                 self.throttle_us,
+                self.esc2_us,
             ));
         } else if self.header == "BB" {
             line.push_str(&format!(

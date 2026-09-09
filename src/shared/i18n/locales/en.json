@@ -1,7 +1,9 @@
 {
   "app": {
     "title": "AZST Ground Station",
-    "subtitle": "TEKNOFEST A4 Rocket Competition"
+    "subtitle": "TEKNOFEST A4 Rocket Competition",
+    "flightTimeline": "Flight Timeline",
+    "droneFlightTimeline": "Drone Flight Timeline"
   },
   "nav": {
     "teamDashboard": "Team Dashboard",
@@ -64,6 +66,7 @@
     "title": "Rocket Avionics (AA)",
     "standby": "STANDBY",
     "awaitingSignal": "STANDBY - AWAITING SIGNAL (AA)",
+    "awaitingSignalDrone": "STANDBY - AWAITING SIGNAL (CC)",
     "bnoCalib": "BNO Calib",
     "calibrated": "FULL (3/3)",
     "drogueChute": "Drogue Chute (Apogee)",
@@ -109,6 +112,12 @@
     "mockHint": "Mock mode — commands are applied to the simulated drone.",
     "rfdHint": "Commands sent over RFD downlink (0x01 = ARM, 0x00 = DISARM)."
   },
+  "droneFlightState": {
+    "standby": "STANDBY",
+    "launched": "LAUNCHED",
+    "descending": "DESCENDING",
+    "landed": "LANDED"
+  },
   "droneTelemetry": {
     "title": "Drone Telemetry",
     "speed": "Drone Speed",
@@ -117,8 +126,11 @@
     "gForce": "G-Force",
     "fastG": "Fast-G Filter",
     "outputStatus": "Actuator Output",
-    "outputActive": "ACTIVE (1480 µs / Stable)",
-    "outputInactive": "CUTOFF (1000 µs / Motion)",
+    "outputActive": "ACTIVE (1650 µs / Slew Rate)",
+    "outputInactive": "OFF (1000 µs / Idle)",
+    "dualEscMotors": "Motors (ESC1 / ESC2)",
+    "esc1": "Motor 1 (ESC1)",
+    "esc2": "Motor 2 (ESC2)",
     "course": "Drone Course"
   },
   "dronePhase": {

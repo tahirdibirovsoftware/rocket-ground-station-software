@@ -164,6 +164,7 @@ impl MockGenerator {
             armed: false,
             state_code: 0,
             throttle_us: 0,
+            esc2_us: 0,
             on_ground: false,
             flight_phase: 0,
             fast_g: 0.0,
@@ -236,6 +237,7 @@ impl MockGenerator {
             armed: false,
             state_code: 0,
             throttle_us: 0,
+            esc2_us: 0,
             on_ground,
             flight_phase,
             fast_g: g_force,
@@ -290,7 +292,8 @@ impl MockGenerator {
         } else {
             1
         };
-        let throttle_us = if motors_on { 2000u16 } else { 1000u16 };
+        let throttle_us = if motors_on { 1650u16 } else { 1000u16 };
+        let esc2_us = if motors_on { 1650u16 } else { 1000u16 };
         let g_force = 1.0 + vertical_velocity.abs() * 0.01;
         let dpdt = -vertical_velocity * 0.12; // approx hPa/s at low altitude
 
@@ -335,6 +338,7 @@ impl MockGenerator {
             armed,
             state_code,
             throttle_us,
+            esc2_us,
             on_ground: false,
             flight_phase: 0,
             fast_g: g_force,

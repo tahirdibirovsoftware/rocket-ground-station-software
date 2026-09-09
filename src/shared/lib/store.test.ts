@@ -198,7 +198,8 @@ describe("Mappers", () => {
       dpdt: 0.36,
       armed: true,
       state_code: 2,
-      throttle_us: 2000,
+      throttle_us: 1650,
+      esc2_us: 1000,
     };
 
     const mapped = mapTelemetryPacket(raw);
@@ -209,7 +210,45 @@ describe("Mappers", () => {
     expect(mapped.dpdt).toBeCloseTo(0.36);
     expect(mapped.armed).toBe(true);
     expect(mapped.stateCode).toBe(2);
-    expect(mapped.throttleUs).toBe(2000);
+    expect(mapped.throttleUs).toBe(1650);
+    expect(mapped.esc2Us).toBe(1000);
+  });
+
+  it("maps dual-ESC with fallback when esc2_us is absent", () => {
+    const raw = {
+      header: "CC",
+      timestamp_ms: 5000,
+      accel_x: 0,
+      accel_y: 0,
+      accel_z: 9.8,
+      gyro_x: 0,
+      gyro_y: 0,
+      gyro_z: 0,
+      mag_x: 0,
+      mag_y: 0,
+      mag_z: 0,
+      temp: 25.0,
+      pressure: 1013.2,
+      humidity: 45.0,
+      altitude: 50.0,
+      aht_temp: 24.0,
+      aht_hum: 46.0,
+      latitude: 38.0,
+      longitude: 34.0,
+      gps_altitude: 50.0,
+      gps_speed: 0,
+      gps_course: 0,
+      roll: 0,
+      pitch: 0,
+      yaw: 0,
+      flight_state: "pad",
+      primary_parachute_deployed: false,
+      secondary_parachute_deployed: false,
+      throttle_us: 1480,
+    };
+    const mapped = mapTelemetryPacket(raw);
+    expect(mapped.throttleUs).toBe(1480);
+    expect(mapped.esc2Us).toBe(1480);
   });
 
   it("maps payload status fields from raw packet", () => {

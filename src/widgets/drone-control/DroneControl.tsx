@@ -17,33 +17,23 @@ import { selectLatestDronePacket } from "@entities/drone-packet";
 import { selectConnectionMode } from "@entities/connection";
 
 const DroneControlLabels = (t: TFunction) => {
-  const stateLabel = (code: number) => {
+  const flightStateLabel = (code: number) => {
     switch (code) {
+      case 0:
+        return t("droneFlightState.standby", "STANDBY");
+      case 1:
+        return t("droneFlightState.launched", "LAUNCHED");
       case 2:
-        return t("droneControl.stateMotorsOn");
+        return t("droneFlightState.descending", "DESCENDING");
       case 3:
       case 4:
-        return t("droneControl.stateTouchdown");
-      case 1:
-        return t("droneControl.stateArmed");
+        return t("droneFlightState.landed", "LANDED");
       default:
-        return t("droneControl.stateDisabled");
-    }
-  };
-  const phaseLabel = (phase: number, code: number) => {
-    switch (phase) {
-      case 0:
-        return t("dronePhase.preLaunch", "PRE-LAUNCH");
-      case 1:
-        return t("dronePhase.inAir", "IN AIR");
-      case 2:
-        return t("dronePhase.onGround", "ON GROUND");
-      default:
-        return stateLabel(code);
+        return t("droneControl.unknownState", { code });
     }
   };
   const armedLabel = (a: boolean) => (a ? t("droneControl.ackArmed") : t("droneControl.ackDisarmed"));
-  return { stateLabel, phaseLabel, armedLabel };
+  return { flightStateLabel, armedLabel };
 };
 
 export const DroneControl = React.memo(function DroneControl() {
@@ -61,8 +51,8 @@ export const DroneControl = React.memo(function DroneControl() {
   const isConnected = connectionMode !== "disconnected";
   const armed = latest?.armed ?? false;
   const stateCode = latest?.stateCode ?? 0;
-  const flightPhase = latest?.flightPhase ?? 0;
   const throttleUs = latest?.throttleUs ?? 0;
+  const esc2Us = latest?.esc2Us ?? throttleUs;
 
   // Command ACK from the flight controller: received "1"/"0" echoes over RF.
   const hasAck = uplinkAcks > 0;
@@ -119,19 +109,21 @@ export const DroneControl = React.memo(function DroneControl() {
           }}
         >
           <div style={readoutStyle}>
-            <div style={readoutLabelStyle}>{t("droneControl.state", "Flight Phase")}</div>
+            <div style={readoutLabelStyle}>{t("droneControl.state", "Flight State")}</div>
             <div
               style={{
                 ...readoutValueStyle,
                 color:
-                  flightPhase === 1
+                  stateCode === 2
                     ? "var(--color-status-nominal)"
-                    : flightPhase === 2
-                      ? "var(--color-status-info)"
-                      : "var(--color-status-warning)",
+                    : stateCode === 1
+                      ? "var(--color-status-warning)"
+                      : stateCode === 3 || stateCode === 4
+                        ? "var(--color-status-info)"
+                        : "var(--color-text-muted)",
               }}
             >
-              {labels.phaseLabel(flightPhase, stateCode)}
+              {labels.flightStateLabel(stateCode)}
             </div>
           </div>
           <div style={readoutStyle}>
@@ -146,18 +138,95 @@ export const DroneControl = React.memo(function DroneControl() {
             </div>
           </div>
           <div style={readoutStyle}>
-            <div style={readoutLabelStyle}>{t("droneTelemetry.outputStatus", "Actuator")}</div>
+            <div style={readoutLabelStyle}>{t("droneTelemetry.dualEscMotors", "Motors (M1 / M2)")}</div>
             <div
               style={{
                 ...readoutValueStyle,
                 color: latest?.outputsActive
                   ? "var(--color-status-nominal)"
                   : "var(--color-text-secondary)",
+                fontSize: "0.6875rem",
+                letterSpacing: "-0.01em",
               }}
             >
-              {latest?.outputsActive ? `${throttleUs || 1480} µs` : `${throttleUs || 1000} µs`}
+              {latest
+                ? `M1: ${throttleUs || (latest.outputsActive ? 1650 : 1000)} | M2: ${esc2Us || (latest.outputsActive ? 1650 : 1000)} µs`
+                : "---"}
             </div>
           </div>
+        </div>
+
+        {/* 4-Stage Drone Flight State Progression */}
+        <div
+          style={{
+            display: "flex",
+            gap: "0.25rem",
+            padding: "0.3125rem",
+            backgroundColor: "var(--color-bg-tertiary)",
+            borderRadius: "0.25rem",
+            border: "1px solid var(--color-border-default)",
+          }}
+        >
+          {[
+            { code: 0, label: t("droneFlightState.standby", "STANDBY") },
+            { code: 1, label: t("droneFlightState.launched", "LAUNCHED") },
+            { code: 2, label: t("droneFlightState.descending", "DESCENDING") },
+            { code: 3, label: t("droneFlightState.landed", "LANDED") },
+          ].map((step) => {
+            const isCurrent = stateCode === step.code || (step.code === 3 && stateCode === 4);
+            const isPast = stateCode > step.code && !(step.code === 3 && stateCode === 4);
+            return (
+              <div
+                key={step.code}
+                style={{
+                  flex: 1,
+                  textAlign: "center",
+                  padding: "0.25rem 0.125rem",
+                  borderRadius: "0.1875rem",
+                  fontSize: "0.5625rem",
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: isCurrent ? 700 : 500,
+                  letterSpacing: "0.03em",
+                  color: isCurrent
+                    ? step.code === 2
+                      ? "var(--color-status-nominal)"
+                      : step.code === 1
+                        ? "var(--color-status-warning)"
+                        : step.code === 3
+                          ? "var(--color-status-info)"
+                          : "var(--color-text-primary)"
+                    : isPast
+                      ? "var(--color-text-secondary)"
+                      : "var(--color-text-muted)",
+                  backgroundColor: isCurrent
+                    ? step.code === 2
+                      ? "rgba(0, 255, 136, 0.18)"
+                      : step.code === 1
+                        ? "rgba(255, 170, 0, 0.18)"
+                        : step.code === 3
+                          ? "rgba(0, 200, 255, 0.18)"
+                          : "rgba(255, 255, 255, 0.1)"
+                    : isPast
+                      ? "rgba(255, 255, 255, 0.04)"
+                      : "transparent",
+                  border: isCurrent
+                    ? `1px solid ${
+                        step.code === 2
+                          ? "rgba(0, 255, 136, 0.5)"
+                          : step.code === 1
+                            ? "rgba(255, 170, 0, 0.5)"
+                            : step.code === 3
+                              ? "rgba(0, 200, 255, 0.5)"
+                              : "rgba(255, 255, 255, 0.3)"
+                      }`
+                    : "1px solid transparent",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                {step.label}
+              </div>
+            );
+          })}
         </div>
 
         {/* Error / notice banners */}

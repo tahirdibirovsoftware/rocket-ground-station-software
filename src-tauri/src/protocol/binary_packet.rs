@@ -321,6 +321,7 @@ pub fn parse_rocket_frame(buf: &[u8]) -> Result<TelemetryPacket, FrameError> {
         armed: false,
         state_code: raw_state,
         throttle_us: 0,
+        esc2_us: 0,
         on_ground: raw_state == 0 || raw_state == 4,
         flight_phase: raw_state,
         fast_g: g_force,
@@ -404,7 +405,7 @@ pub fn parse_telemetry_payload(
     let gps_speed = to_f32_u16(rd_u16(payload, 46), 100.0);
     let gps_course = to_f32_u16(rd_u16(payload, 48), 100.0);
 
-    let is_drone_74 = device_id == DEVICE_DRONE && payload.len() >= 74;
+    let is_drone_pro = device_id == DEVICE_DRONE && payload.len() >= 74;
 
     let (
         roll,
@@ -416,13 +417,14 @@ pub fn parse_telemetry_payload(
         dpdt,
         state_code,
         throttle_us,
+        esc2_us,
         on_ground,
         flight_phase,
         fast_g,
         outputs_active,
         armed,
-    ) = if is_drone_74 {
-        // Updated Teensy 4.1 Drone (CC) Industrial Pro layout (74 bytes):
+    ) = if is_drone_pro {
+        // Updated Teensy 4.1 Drone (CC) Industrial Pro layout (74 or 76 bytes):
         // Offset 50: gps_sats (u8)
         // Offset 51: gps_fix_quality (u8)
         // Offset 52..53: gps_hdop_x100 (u16)
@@ -441,6 +443,11 @@ pub fn parse_telemetry_payload(
         let armed = payload[70] == 1 || (flags & FLAG_ARMED != 0);
         let state_code = payload[71];
         let throttle_us = rd_u16(payload, 72);
+        let esc2_us = if payload.len() >= 76 {
+            rd_u16(payload, 74)
+        } else {
+            throttle_us
+        };
 
         let flight_phase = match state_code {
             0 => 0,     // FS_STANDBY -> PRE_LAUNCH
@@ -450,6 +457,7 @@ pub fn parse_telemetry_payload(
         };
         let on_ground = state_code == 0 || state_code == 3;
         let outputs_active = throttle_us > 1000
+            || esc2_us > 1000
             || state_code == 2
             || (flags & FLAG_DESCENDING != 0)
             || (flags & DRONE_FLAG_DESCENDING != 0);
@@ -465,6 +473,7 @@ pub fn parse_telemetry_payload(
             dpdt,
             state_code,
             throttle_us,
+            esc2_us,
             on_ground,
             flight_phase,
             fast_g,
@@ -520,6 +529,7 @@ pub fn parse_telemetry_payload(
             _ => unreachable!(),
         };
 
+        let esc2_us = throttle_us;
         let armed = flags & FLAG_ARMED != 0;
         (
             roll,
@@ -531,6 +541,7 @@ pub fn parse_telemetry_payload(
             dpdt,
             state_code,
             throttle_us,
+            esc2_us,
             on_ground,
             flight_phase,
             fast_g,
@@ -571,7 +582,7 @@ pub fn parse_telemetry_payload(
         roll,
         pitch,
         yaw,
-        flight_state: if is_drone_74 {
+        flight_state: if is_drone_pro {
             match state_code {
                 0 => FlightState::Pad,
                 1 => FlightState::Powered,
@@ -582,8 +593,8 @@ pub fn parse_telemetry_payload(
         } else {
             FlightState::Pad
         },
-        primary_parachute_deployed: is_drone_74 && (state_code == 2 || state_code == 3),
-        secondary_parachute_deployed: is_drone_74 && state_code == 3,
+        primary_parachute_deployed: is_drone_pro && (state_code == 2 || state_code == 3),
+        secondary_parachute_deployed: is_drone_pro && state_code == 3,
         rel_alt,
         vertical_velocity,
         g_force,
@@ -591,6 +602,7 @@ pub fn parse_telemetry_payload(
         armed,
         state_code,
         throttle_us,
+        esc2_us,
         on_ground,
         flight_phase,
         fast_g,
@@ -622,7 +634,7 @@ pub fn parse_drone_status_payload(payload: &[u8]) -> Option<(u8, u16, bool)> {
         let armed = payload[0] == 1;
         let state_code = payload[1];
         let throttle_us = if armed && state_code == 2 {
-            1480
+            1650
         } else {
             1000
         };
@@ -901,10 +913,15 @@ mod tests {
     #[test]
     fn drone_firmware_2_byte_status_decodes() {
         // Updated firmware format: [armed (0/1), flight.state_code() (0..=3)]
-        // Armed (1) during FS_DESCENDING (2) -> throttle 1480
+        // Armed (1) during FS_DESCENDING (2) -> throttle 1650
         assert_eq!(
             parse_drone_status_payload(&[1, 2]),
-            Some((2, 1480, true))
+            Some((2, 1650, true))
+        );
+        // Armed (1) during FS_LAUNCHED (1) -> throttle 1000 (motors off during ascent)
+        assert_eq!(
+            parse_drone_status_payload(&[1, 1]),
+            Some((1, 1000, true))
         );
         // Disarmed (0) during FS_LANDED (3) -> throttle 1000, armed false
         assert_eq!(
@@ -1214,15 +1231,123 @@ mod tests {
         assert!(pkt.on_ground);
         assert!(!pkt.outputs_active);
         assert_eq!(pkt.throttle_us, 1000);
+        assert_eq!(pkt.esc2_us, 1000);
         assert!(!pkt.armed);
+    }
+
+    /// Build a Teensy 4.1 Industrial Pro drone telemetry frame (76-byte dual-ESC payload).
+    fn build_drone_dual_esc_frame(
+        flags: u16,
+        state_code: u8,
+        esc1_us: u16,
+        esc2_us: u16,
+        armed: bool,
+    ) -> Vec<u8> {
+        let mut frame = vec![
+            SYNC1,
+            SYNC2,
+            0x01,       // version
+            DEVICE_DRONE,
+            PKT_TELEMETRY,
+            0x12, 0x34, // seq
+            0x78, 0x56, 0x34, 0x12, // timestamp
+            76,         // payload length = 76 bytes
+        ];
+
+        let mut p: Vec<u8> = Vec::with_capacity(76);
+        p.extend_from_slice(&flags.to_le_bytes()); // 0..2
+        // IMU: ax=1.23, ay=-4.56, az=9.81, gx=0.5, gy=-0.25, gz=0.125, mx=12.3, my=-45.6, mz=78.9
+        for v in [123i16, -456, 981, 500, -250, 125, 123, -456, 789] {
+            p.extend_from_slice(&v.to_le_bytes()); // 2..20
+        }
+        // BME280: temp 23.45, pressure 1013.2, humidity 45.5, altitude 1234.56
+        p.extend_from_slice(&2345i16.to_le_bytes()); // 20..22
+        p.extend_from_slice(&10132u16.to_le_bytes()); // 22..24
+        p.extend_from_slice(&4550u16.to_le_bytes()); // 24..26
+        p.extend_from_slice(&123456i32.to_le_bytes()); // 26..30
+        // AHT20: temp 22.34, hum 51.2
+        p.extend_from_slice(&2234i16.to_le_bytes()); // 30..32
+        p.extend_from_slice(&5120u16.to_le_bytes()); // 32..34
+        // GPS: lat 38.3687, lon 34.0370, alt 1500.25, speed 12.5, course 180.0, sats 8
+        let lat_e7 = (38.3687 * 10_000_000.0) as i32;
+        let lon_e7 = (34.0370 * 10_000_000.0) as i32;
+        p.extend_from_slice(&lat_e7.to_le_bytes()); // 34..38
+        p.extend_from_slice(&lon_e7.to_le_bytes()); // 38..42
+        p.extend_from_slice(&150025i32.to_le_bytes()); // 42..46
+        p.extend_from_slice(&1250u16.to_le_bytes()); // 46..48
+        p.extend_from_slice(&18000u16.to_le_bytes()); // 48..50
+        p.push(8); // 50: sats
+        p.push(1); // 51: fix_quality (1 = GPS)
+        p.extend_from_slice(&150u16.to_le_bytes()); // 52..54: hdop = 1.50
+        // Attitude: roll 5.5, pitch -3.2, yaw 90.0
+        for v in [550i16, -320, 9000] {
+            p.extend_from_slice(&v.to_le_bytes()); // 54..60
+        }
+        // AltVel: rel_alt 456.78, vel -12.34, g 1.234, dpdt -0.567
+        p.extend_from_slice(&45678i32.to_le_bytes()); // 60..64
+        p.extend_from_slice(&(-1234i16).to_le_bytes()); // 64..66
+        p.extend_from_slice(&1234u16.to_le_bytes()); // 66..68
+        p.extend_from_slice(&(-567i16).to_le_bytes()); // 68..70
+        // Tail: armed, state_code, esc1_us, esc2_us
+        p.push(if armed { 1 } else { 0 }); // 70
+        p.push(state_code); // 71
+        p.extend_from_slice(&esc1_us.to_le_bytes()); // 72..74
+        p.extend_from_slice(&esc2_us.to_le_bytes()); // 74..76
+        assert_eq!(p.len(), 76);
+
+        frame.extend_from_slice(&p);
+        let crc = crc16_ccitt(&frame);
+        frame.extend_from_slice(&crc.to_le_bytes());
+        frame
+    }
+
+    #[test]
+    fn drone_dual_esc_staggered_activation_decodes() {
+        let flags = FLAG_BNO_OK | FLAG_BME_OK | FLAG_AHT_OK | FLAG_GPS_FIX | FLAG_ARMED | DRONE_FLAG_DESCENDING;
+        // Staggered activation: M1 running at 1650 us, M2 waiting on 1000ms timer at 1000 us
+        let frame = build_drone_dual_esc_frame(flags, 2, 1650, 1000, true);
+        let parsed = parse_frame(&frame).expect("76-byte frame parses");
+        assert_eq!(parsed.payload.len(), 76);
+
+        let pkt = parse_telemetry_payload(parsed.device_id, parsed.timestamp_ms, &parsed.payload)
+            .expect("76-byte drone telemetry decodes");
+
+        assert_eq!(pkt.header, "CC");
+        assert_eq!(pkt.throttle_us, 1650);
+        assert_eq!(pkt.esc2_us, 1000);
+        assert!(pkt.outputs_active);
+        assert!(pkt.armed);
+        assert_eq!(pkt.state_code, 2);
+    }
+
+    #[test]
+    fn drone_dual_esc_both_active_decodes() {
+        let flags = FLAG_BNO_OK | FLAG_BME_OK | FLAG_AHT_OK | FLAG_GPS_FIX | FLAG_ARMED | DRONE_FLAG_DESCENDING;
+        // Both motors running at 1650 us
+        let frame = build_drone_dual_esc_frame(flags, 2, 1650, 1650, true);
+        let parsed = parse_frame(&frame).expect("76-byte frame parses");
+        assert_eq!(parsed.payload.len(), 76);
+
+        let pkt = parse_telemetry_payload(parsed.device_id, parsed.timestamp_ms, &parsed.payload)
+            .expect("76-byte drone telemetry decodes");
+
+        assert_eq!(pkt.throttle_us, 1650);
+        assert_eq!(pkt.esc2_us, 1650);
+        assert!(pkt.outputs_active);
     }
 
     #[test]
     fn drone_industrial_pro_status_event_decodes() {
-        // [armed=1, state_code=2 (FS_DESCENDING)] -> throttle 1480, armed true
+        // [armed=1, state_code=2 (FS_DESCENDING)] -> throttle 1650, armed true
         let (state, throttle, armed) = parse_drone_status_payload(&[1, 2]).unwrap();
         assert_eq!(state, 2);
-        assert_eq!(throttle, 1480);
+        assert_eq!(throttle, 1650);
+        assert!(armed);
+
+        // [armed=1, state_code=1 (FS_LAUNCHED)] -> throttle 1000, armed true
+        let (state, throttle, armed) = parse_drone_status_payload(&[1, 1]).unwrap();
+        assert_eq!(state, 1);
+        assert_eq!(throttle, 1000);
         assert!(armed);
 
         // [armed=0, state_code=3 (FS_LANDED)] -> throttle 1000, armed false

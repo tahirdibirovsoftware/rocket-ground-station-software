@@ -489,7 +489,7 @@ fn parse_binary_firmware_drone_status_2_bytes() {
             armed,
         } => {
             assert_eq!(*state_code, 2);
-            assert_eq!(*throttle_us, 1480);
+            assert_eq!(*throttle_us, 1650);
             assert!(*armed);
         }
         other => panic!("expected drone status, got {other:?}"),

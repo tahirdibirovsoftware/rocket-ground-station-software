@@ -14,6 +14,14 @@ export enum FlightState {
   SecondaryChute = 5,
 }
 
+/* ── Drone Flight State Enum (CC) ── */
+export enum DroneFlightState {
+  Standby = 0,
+  Launched = 1,
+  Descending = 2,
+  Landed = 3,
+}
+
 /* ── Telemetry Packet (ASCII CSV parsed schema) ── */
 export interface TelemetryPacket {
   header: string;                  // "AA", "BB", "CC"
@@ -50,8 +58,9 @@ export interface TelemetryPacket {
   gForce: number;              // G-loading (g)
   dpdt: number;                // pressure change rate (hPa/s)
   armed: boolean;              // RF ARM command state
-  stateCode: number;           // 0=DISARMED, 1=ARMED, 2=MOTORS_ON
-  throttleUs: number;          // ESC pulse width (1000..2000 us)
+  stateCode: number;           // 0=STANDBY, 1=LAUNCHED, 2=DESCENDING, 3=LANDED
+  throttleUs: number;          // ESC 1 pulse width (1000..2000 us)
+  esc2Us?: number;             // ESC 2 pulse width (1000..2000 us)
   /* ── Payload status fields (BB only) ── */
   onGround: boolean;           // true = payload landed, false = in sky
   flightPhase: number;         // 0=PRE_LAUNCH, 1=IN_AIR, 2=ON_GROUND

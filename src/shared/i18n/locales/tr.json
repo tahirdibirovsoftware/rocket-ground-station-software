@@ -1,7 +1,9 @@
 {
   "app": {
-    "title": "AZST Yer Istasyonu",
-    "subtitle": "TEKNOFEST A4 Roket Yarismasi"
+    "title": "AZST Yer İstasyonu",
+    "subtitle": "TEKNOFEST A4 Roket Yarışması",
+    "flightTimeline": "Uçuş Zaman Çizelgesi",
+    "droneFlightTimeline": "Drone Uçuş Zaman Çizelgesi"
   },
   "nav": {
     "teamDashboard": "Takim Paneli",
@@ -64,6 +66,7 @@
     "title": "Roket Aviyonik (AA)",
     "standby": "BEKLEMEDE",
     "awaitingSignal": "BEKLEMEDE - SİNYAL BEKLENİYOR (AA)",
+    "awaitingSignalDrone": "BEKLEMEDE - SİNYAL BEKLENİYOR (CC)",
     "bnoCalib": "BNO Kalib.",
     "calibrated": "TAM (3/3)",
     "drogueChute": "Fren Paraşütü (Apoje)",
@@ -109,6 +112,12 @@
     "mockHint": "Simulasyon modu — komutlar sanal drone'a uygulanır.",
     "rfdHint": "Komutlar RFD downlink üzerinden gönderilir (0x01 = AKTİF, 0x00 = PASİF)."
   },
+  "droneFlightState": {
+    "standby": "BEKLEMEDE",
+    "launched": "FIRLATILDI",
+    "descending": "İNİŞTE",
+    "landed": "İNİŞ YAPTI"
+  },
   "droneTelemetry": {
     "title": "Drone Telemetri",
     "speed": "Drone Hızı",
@@ -117,8 +126,11 @@
     "gForce": "G Kuvveti",
     "fastG": "Hızlı G Filtresi",
     "outputStatus": "Çıkış Durumu",
-    "outputActive": "AKTİF (1480 µs / Durgun)",
-    "outputInactive": "KESİLDİ (1000 µs / Hareket)",
+    "outputActive": "AKTİF (1650 µs / Slew Rate)",
+    "outputInactive": "KAPALI (1000 µs / Rölanti)",
+    "dualEscMotors": "Motorlar (ESC1 / ESC2)",
+    "esc1": "Motor 1 (ESC1)",
+    "esc2": "Motor 2 (ESC2)",
     "course": "Drone Rotası"
   },
   "dronePhase": {

@@ -248,7 +248,7 @@ export function TeamDashboardPage() {
       }}
     >
       {/* Flight Timeline — full width */}
-      <FlightTimeline />
+      <FlightTimeline activeStream={activeStream} />
 
       {/* Main 3-pane layout: control rail | telemetry | media */}
       <div

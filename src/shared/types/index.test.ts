@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   FlightState,
+  DroneFlightState,
   ConnectionStatus,
 } from "@shared/types";
 import {
@@ -18,6 +19,13 @@ describe("Shared Types", () => {
     expect(FlightState.Apogee).toBe(3);
     expect(FlightState.PrimaryChute).toBe(4);
     expect(FlightState.SecondaryChute).toBe(5);
+  });
+
+  it("DroneFlightState enum has correct numeric values", () => {
+    expect(DroneFlightState.Standby).toBe(0);
+    expect(DroneFlightState.Launched).toBe(1);
+    expect(DroneFlightState.Descending).toBe(2);
+    expect(DroneFlightState.Landed).toBe(3);
   });
 
   it("ConnectionStatus has correct string values", () => {
