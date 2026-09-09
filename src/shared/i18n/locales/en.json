@@ -107,7 +107,7 @@
     "disarmEngine": "DISARM ENGINE",
     "linkOffline": "RFD link offline — connect RFD or start Mock to control the drone.",
     "mockHint": "Mock mode — commands are applied to the simulated drone.",
-    "rfdHint": "Commands sent over RFD downlink ('1' = ARM, '0' = DISARM)."
+    "rfdHint": "Commands sent over RFD downlink (0x01 = ARM, 0x00 = DISARM)."
   },
   "droneTelemetry": {
     "title": "Drone Telemetry",

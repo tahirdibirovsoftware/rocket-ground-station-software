@@ -91,7 +91,16 @@ pub fn emit_payload_status(
 
 /// Emit a drone status event to the frontend.
 pub fn emit_drone_status(app: &AppHandle, state_code: u8, throttle_us: u16, armed: bool) {
-    let flight_phase = state_code;
+    // Map flight controller state code to standard ground station flight phase:
+    // 0 = FS_STANDBY -> PRE_LAUNCH (0)
+    // 1 = FS_LAUNCHED / 2 = FS_DESCENDING -> IN_AIR (1)
+    // 3 = FS_LANDED / 4 = TOUCHDOWN -> ON_GROUND (2)
+    let flight_phase = match state_code {
+        0 => 0,
+        1 | 2 => 1,
+        3 | 4 => 2,
+        other => other,
+    };
     let outputs_active = throttle_us > 1000;
     let event = DroneStatusEvent {
         state_code,

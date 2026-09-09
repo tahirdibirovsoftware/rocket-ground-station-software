@@ -84,6 +84,9 @@ pub const FLAG_OUTPUT_ACTIVE: u16 = 0x0040;
 pub const FLAG_TOUCHDOWN: u16 = 0x0040;
 /// Drone only: descending.
 pub const FLAG_DESCENDING: u16 = 0x0080;
+/// In updated Teensy 4.1 Drone (CC) firmware:
+pub const DRONE_FLAG_DESCENDING: u16 = 0x0020;
+pub const DRONE_FLAG_CAL_SAVED: u16 = 0x0040;
 
 /// Maximum frame size (12 header + 96 payload + 2 CRC).
 pub const MAX_FRAME_SIZE: usize = 160;
@@ -102,6 +105,25 @@ pub fn crc16_ccitt(data: &[u8]) -> u16 {
         }
     }
     crc
+}
+
+/// Build a 7-byte binary downlink command packet for Teensy 4.1 Industrial Pro Drone:
+/// `[0xAA, 0x55, 0x01, 0xCC, cmd, crc_lo, crc_hi]`
+/// where cmd is 0x01 (ARM) or 0x00 (DISARM), and CRC16-CCITT is calculated over `[0x01, 0xCC, cmd]`.
+pub fn build_drone_command_packet(armed: bool) -> [u8; 7] {
+    let cmd = if armed { 0x01 } else { 0x00 };
+    let body = [0x01, DEVICE_DRONE, cmd];
+    let crc = crc16_ccitt(&body);
+    let crc_bytes = crc.to_le_bytes();
+    [
+        SYNC1,
+        SYNC2,
+        0x01,
+        DEVICE_DRONE,
+        cmd,
+        crc_bytes[0],
+        crc_bytes[1],
+    ]
 }
 
 /// A parsed binary frame.
@@ -382,32 +404,90 @@ pub fn parse_telemetry_payload(
     let gps_speed = to_f32_u16(rd_u16(payload, 46), 100.0);
     let gps_course = to_f32_u16(rd_u16(payload, 48), 100.0);
 
-    // Attitude
-    let roll = to_f32_i16(rd_i16(payload, 51), 100.0);
-    let pitch = to_f32_i16(rd_i16(payload, 53), 100.0);
-    let yaw = to_f32_i16(rd_i16(payload, 55), 100.0);
+    let is_drone_74 = device_id == DEVICE_DRONE && payload.len() >= 74;
 
-    // Alt/vel filter (shared layout)
-    let rel_alt = to_f32_i32(rd_i32(payload, 57), 100.0);
-    let vertical_velocity = to_f32_i16(rd_i16(payload, 61), 100.0);
-    let g_force = to_f32_u16(rd_u16(payload, 63), 1000.0);
-    let dpdt = to_f32_i16(rd_i16(payload, 65), 1000.0);
+    let (
+        roll,
+        pitch,
+        yaw,
+        rel_alt,
+        vertical_velocity,
+        g_force,
+        dpdt,
+        state_code,
+        throttle_us,
+        on_ground,
+        flight_phase,
+        fast_g,
+        outputs_active,
+        armed,
+    ) = if is_drone_74 {
+        // Updated Teensy 4.1 Drone (CC) Industrial Pro layout (74 bytes):
+        // Offset 50: gps_sats (u8)
+        // Offset 51: gps_fix_quality (u8)
+        // Offset 52..53: gps_hdop_x100 (u16)
+        // Offset 54..59: Attitude roll, pitch, yaw (i16 x100)
+        let roll = to_f32_i16(rd_i16(payload, 54), 100.0);
+        let pitch = to_f32_i16(rd_i16(payload, 56), 100.0);
+        let yaw = to_f32_i16(rd_i16(payload, 58), 100.0);
 
-    // Device-specific tail
-    let (state_code, throttle_us, on_ground, flight_phase, fast_g, outputs_active) = match device_id {
-        DEVICE_PAYLOAD => {
-            // fast_g at 67-68 (u16 x1000), flight_phase at 69, outputs_active at 70
-            let fast_g = to_f32_u16(rd_u16(payload, 67), 1000.0);
-            let flight_phase = payload[69];
-            let outputs_active = payload[70] == 1 || (flags & FLAG_OUTPUT_ACTIVE != 0);
-            let on_ground = flight_phase == 2;
-            let state_code = flight_phase;
-            let throttle_us = if outputs_active { 1480 } else { 1000 };
-            (state_code, throttle_us, on_ground, flight_phase, fast_g, outputs_active)
-        }
-        DEVICE_DRONE => {
-            if payload.len() == 71 {
-                // Teensy 4.1 flight controller installed on drone hardware (71-byte layout)
+        // Offset 60..69: Alt/vel filter
+        let rel_alt = to_f32_i32(rd_i32(payload, 60), 100.0);
+        let vertical_velocity = to_f32_i16(rd_i16(payload, 64), 100.0);
+        let g_force = to_f32_u16(rd_u16(payload, 66), 1000.0);
+        let dpdt = to_f32_i16(rd_i16(payload, 68), 1000.0);
+
+        // Offset 70..73: Drone flight controller tail
+        let armed = payload[70] == 1 || (flags & FLAG_ARMED != 0);
+        let state_code = payload[71];
+        let throttle_us = rd_u16(payload, 72);
+
+        let flight_phase = match state_code {
+            0 => 0,     // FS_STANDBY -> PRE_LAUNCH
+            1 | 2 => 1, // FS_LAUNCHED / FS_DESCENDING -> IN_AIR
+            3 => 2,     // FS_LANDED -> ON_GROUND
+            other => other,
+        };
+        let on_ground = state_code == 0 || state_code == 3;
+        let outputs_active = throttle_us > 1000
+            || state_code == 2
+            || (flags & FLAG_DESCENDING != 0)
+            || (flags & DRONE_FLAG_DESCENDING != 0);
+        let fast_g = g_force;
+
+        (
+            roll,
+            pitch,
+            yaw,
+            rel_alt,
+            vertical_velocity,
+            g_force,
+            dpdt,
+            state_code,
+            throttle_us,
+            on_ground,
+            flight_phase,
+            fast_g,
+            outputs_active,
+            armed,
+        )
+    } else {
+        // Shared 71/72 byte layout:
+        // Attitude
+        let roll = to_f32_i16(rd_i16(payload, 51), 100.0);
+        let pitch = to_f32_i16(rd_i16(payload, 53), 100.0);
+        let yaw = to_f32_i16(rd_i16(payload, 55), 100.0);
+
+        // Alt/vel filter (shared layout)
+        let rel_alt = to_f32_i32(rd_i32(payload, 57), 100.0);
+        let vertical_velocity = to_f32_i16(rd_i16(payload, 61), 100.0);
+        let g_force = to_f32_u16(rd_u16(payload, 63), 1000.0);
+        let dpdt = to_f32_i16(rd_i16(payload, 65), 1000.0);
+
+        // Device-specific tail
+        let (state_code, throttle_us, on_ground, flight_phase, fast_g, outputs_active) = match device_id {
+            DEVICE_PAYLOAD => {
+                // fast_g at 67-68 (u16 x1000), flight_phase at 69, outputs_active at 70
                 let fast_g = to_f32_u16(rd_u16(payload, 67), 1000.0);
                 let flight_phase = payload[69];
                 let outputs_active = payload[70] == 1 || (flags & FLAG_OUTPUT_ACTIVE != 0);
@@ -415,18 +495,48 @@ pub fn parse_telemetry_payload(
                 let state_code = flight_phase;
                 let throttle_us = if outputs_active { 1480 } else { 1000 };
                 (state_code, throttle_us, on_ground, flight_phase, fast_g, outputs_active)
-            } else {
-                // Legacy drone frame layout (72 bytes: accel_bias, state_code, throttle_us)
-                let accel_bias = to_f32_i16(rd_i16(payload, 67), 1000.0);
-                let state_code = payload[69];
-                let throttle_us = rd_u16(payload, 70);
-                let on_ground = flags & FLAG_TOUCHDOWN != 0;
-                let outputs_active = flags & FLAG_MOTORS_ON != 0 || throttle_us > 1000;
-                let flight_phase = 0;
-                (state_code, throttle_us, on_ground, flight_phase, accel_bias, outputs_active)
             }
-        }
-        _ => unreachable!(),
+            DEVICE_DRONE => {
+                if payload.len() == 71 {
+                    // Teensy 4.1 flight controller installed on drone hardware (71-byte layout)
+                    let fast_g = to_f32_u16(rd_u16(payload, 67), 1000.0);
+                    let flight_phase = payload[69];
+                    let outputs_active = payload[70] == 1 || (flags & FLAG_OUTPUT_ACTIVE != 0);
+                    let on_ground = flight_phase == 2;
+                    let state_code = flight_phase;
+                    let throttle_us = if outputs_active { 1480 } else { 1000 };
+                    (state_code, throttle_us, on_ground, flight_phase, fast_g, outputs_active)
+                } else {
+                    // Legacy drone frame layout (72 bytes: accel_bias, state_code, throttle_us)
+                    let accel_bias = to_f32_i16(rd_i16(payload, 67), 1000.0);
+                    let state_code = payload[69];
+                    let throttle_us = rd_u16(payload, 70);
+                    let on_ground = flags & FLAG_TOUCHDOWN != 0;
+                    let outputs_active = flags & FLAG_MOTORS_ON != 0 || throttle_us > 1000;
+                    let flight_phase = 0;
+                    (state_code, throttle_us, on_ground, flight_phase, accel_bias, outputs_active)
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        let armed = flags & FLAG_ARMED != 0;
+        (
+            roll,
+            pitch,
+            yaw,
+            rel_alt,
+            vertical_velocity,
+            g_force,
+            dpdt,
+            state_code,
+            throttle_us,
+            on_ground,
+            flight_phase,
+            fast_g,
+            outputs_active,
+            armed,
+        )
     };
 
     // Validity masks: zero out sensors flagged off
@@ -461,14 +571,24 @@ pub fn parse_telemetry_payload(
         roll,
         pitch,
         yaw,
-        flight_state: FlightState::Pad,
-        primary_parachute_deployed: false,
-        secondary_parachute_deployed: false,
+        flight_state: if is_drone_74 {
+            match state_code {
+                0 => FlightState::Pad,
+                1 => FlightState::Powered,
+                2 => FlightState::PrimaryChute,
+                3 => FlightState::Pad,
+                _ => FlightState::Pad,
+            }
+        } else {
+            FlightState::Pad
+        },
+        primary_parachute_deployed: is_drone_74 && (state_code == 2 || state_code == 3),
+        secondary_parachute_deployed: is_drone_74 && state_code == 3,
         rel_alt,
         vertical_velocity,
         g_force,
         dpdt,
-        armed: flags & FLAG_ARMED != 0,
+        armed,
         state_code,
         throttle_us,
         on_ground,
@@ -494,14 +614,19 @@ pub fn parse_payload_status_payload(payload: &[u8]) -> Option<(bool, u8, bool)> 
 }
 
 /// Decode a drone status-event payload:
-/// Accepts either 2-byte Teensy firmware payload `[output_status (0/1), flight_phase (0/1/2)]`
-/// or legacy 4-byte payload `[state_code, throttle u16, armed (0/1)]`.
+/// Accepts:
+/// - 2-byte updated Teensy 4.1 firmware payload: `[armed (0/1), flight.state_code() (0..=3)]`
+/// - 4-byte legacy payload: `[state_code, throttle u16, armed (0/1)]`.
 pub fn parse_drone_status_payload(payload: &[u8]) -> Option<(u8, u16, bool)> {
-    if payload.len() == 2 && payload[0] <= 1 && payload[1] <= 2 {
-        let output_active = payload[0] == 1;
-        let flight_phase = payload[1];
-        let throttle_us = if output_active { 1480 } else { 1000 };
-        Some((flight_phase, throttle_us, true))
+    if payload.len() == 2 && payload[0] <= 1 && payload[1] <= 4 {
+        let armed = payload[0] == 1;
+        let state_code = payload[1];
+        let throttle_us = if armed && state_code == 2 {
+            1480
+        } else {
+            1000
+        };
+        Some((state_code, throttle_us, armed))
     } else if payload.len() >= 4 {
         Some((payload[0], rd_u16(payload, 1), payload[3] == 1))
     } else {
@@ -775,16 +900,21 @@ mod tests {
 
     #[test]
     fn drone_firmware_2_byte_status_decodes() {
-        // Firmware format: [output_status (0/1), flight_phase (0/1/2)]
-        // Active output (1) during IN_AIR (1)
+        // Updated firmware format: [armed (0/1), flight.state_code() (0..=3)]
+        // Armed (1) during FS_DESCENDING (2) -> throttle 1480
         assert_eq!(
-            parse_drone_status_payload(&[1, 1]),
-            Some((1, 1480, true))
+            parse_drone_status_payload(&[1, 2]),
+            Some((2, 1480, true))
         );
-        // Cutoff output (0) during ON_GROUND (2)
+        // Disarmed (0) during FS_LANDED (3) -> throttle 1000, armed false
         assert_eq!(
-            parse_drone_status_payload(&[0, 2]),
-            Some((2, 1000, true))
+            parse_drone_status_payload(&[0, 3]),
+            Some((3, 1000, false))
+        );
+        // Disarmed (0) during FS_STANDBY (0) -> throttle 1000, armed false
+        assert_eq!(
+            parse_drone_status_payload(&[0, 0]),
+            Some((0, 1000, false))
         );
     }
 
@@ -973,6 +1103,158 @@ mod tests {
         assert!(p4.on_ground);
         assert!(p4.primary_parachute_deployed);
         assert!(p4.secondary_parachute_deployed);
+    }
+
+    /// Build a Teensy 4.1 Industrial Pro drone telemetry frame (74-byte payload).
+    fn build_drone_industrial_pro_frame(
+        flags: u16,
+        state_code: u8,
+        esc1_us: u16,
+        armed: bool,
+    ) -> Vec<u8> {
+        let mut frame = vec![
+            SYNC1,
+            SYNC2,
+            0x01,       // version
+            DEVICE_DRONE,
+            PKT_TELEMETRY,
+            0x12, 0x34, // seq
+            0x78, 0x56, 0x34, 0x12, // timestamp
+            74,         // payload length = 74 bytes
+        ];
+
+        let mut p: Vec<u8> = Vec::with_capacity(74);
+        p.extend_from_slice(&flags.to_le_bytes()); // 0..2
+        // IMU: ax=1.23, ay=-4.56, az=9.81, gx=0.5, gy=-0.25, gz=0.125, mx=12.3, my=-45.6, mz=78.9
+        for v in [123i16, -456, 981, 500, -250, 125, 123, -456, 789] {
+            p.extend_from_slice(&v.to_le_bytes()); // 2..20
+        }
+        // BME280: temp 23.45, pressure 1013.2, humidity 45.5, altitude 1234.56
+        p.extend_from_slice(&2345i16.to_le_bytes()); // 20..22
+        p.extend_from_slice(&10132u16.to_le_bytes()); // 22..24
+        p.extend_from_slice(&4550u16.to_le_bytes()); // 24..26
+        p.extend_from_slice(&123456i32.to_le_bytes()); // 26..30
+        // AHT20: temp 22.34, hum 51.2
+        p.extend_from_slice(&2234i16.to_le_bytes()); // 30..32
+        p.extend_from_slice(&5120u16.to_le_bytes()); // 32..34
+        // GPS: lat 38.3687, lon 34.0370, alt 1500.25, speed 12.5, course 180.0, sats 8
+        let lat_e7 = (38.3687 * 10_000_000.0) as i32;
+        let lon_e7 = (34.0370 * 10_000_000.0) as i32;
+        p.extend_from_slice(&lat_e7.to_le_bytes()); // 34..38
+        p.extend_from_slice(&lon_e7.to_le_bytes()); // 38..42
+        p.extend_from_slice(&150025i32.to_le_bytes()); // 42..46
+        p.extend_from_slice(&1250u16.to_le_bytes()); // 46..48
+        p.extend_from_slice(&18000u16.to_le_bytes()); // 48..50
+        p.push(8); // 50: sats
+        p.push(1); // 51: fix_quality (1 = GPS)
+        p.extend_from_slice(&150u16.to_le_bytes()); // 52..54: hdop = 1.50
+        // Attitude: roll 5.5, pitch -3.2, yaw 90.0
+        for v in [550i16, -320, 9000] {
+            p.extend_from_slice(&v.to_le_bytes()); // 54..60
+        }
+        // AltVel: rel_alt 456.78, vel -12.34, g 1.234, dpdt -0.567
+        p.extend_from_slice(&45678i32.to_le_bytes()); // 60..64
+        p.extend_from_slice(&(-1234i16).to_le_bytes()); // 64..66
+        p.extend_from_slice(&1234u16.to_le_bytes()); // 66..68
+        p.extend_from_slice(&(-567i16).to_le_bytes()); // 68..70
+        // Tail: armed, state_code, esc1_us
+        p.push(if armed { 1 } else { 0 }); // 70
+        p.push(state_code); // 71
+        p.extend_from_slice(&esc1_us.to_le_bytes()); // 72..74
+        assert_eq!(p.len(), 74);
+
+        frame.extend_from_slice(&p);
+        let crc = crc16_ccitt(&frame);
+        frame.extend_from_slice(&crc.to_le_bytes());
+        frame
+    }
+
+    #[test]
+    fn drone_industrial_pro_74_byte_telemetry_decodes() {
+        let flags = FLAG_BNO_OK | FLAG_BME_OK | FLAG_AHT_OK | FLAG_GPS_FIX | FLAG_ARMED | DRONE_FLAG_DESCENDING;
+        let frame = build_drone_industrial_pro_frame(flags, 2, 1480, true);
+        let parsed = parse_frame(&frame).expect("74-byte frame parses");
+        assert_eq!(parsed.payload.len(), 74);
+
+        let pkt = parse_telemetry_payload(parsed.device_id, parsed.timestamp_ms, &parsed.payload)
+            .expect("74-byte drone telemetry decodes");
+
+        assert_eq!(pkt.header, "CC");
+        // Verify attitude is NOT corrupted by hdop/fix_quality
+        assert!((pkt.roll - 5.5).abs() < 0.01, "roll is 5.5, got {}", pkt.roll);
+        assert!((pkt.pitch - (-3.2)).abs() < 0.01, "pitch is -3.2, got {}", pkt.pitch);
+        assert!((pkt.yaw - 90.0).abs() < 0.01, "yaw is 90.0, got {}", pkt.yaw);
+
+        // Verify Alt/Vel filter readings
+        assert!((pkt.rel_alt - 456.78).abs() < 0.05, "rel_alt is 456.78, got {}", pkt.rel_alt);
+        assert!((pkt.vertical_velocity - (-12.34)).abs() < 0.05);
+        assert!((pkt.g_force - 1.234).abs() < 0.01);
+        assert!((pkt.dpdt - (-0.567)).abs() < 0.01);
+
+        // Verify drone control state (state_code=2 FS_DESCENDING)
+        assert!(pkt.armed);
+        assert_eq!(pkt.state_code, 2);
+        assert_eq!(pkt.flight_phase, 1);
+        assert_eq!(pkt.throttle_us, 1480);
+        assert!(pkt.outputs_active);
+        assert!(!pkt.on_ground);
+    }
+
+    #[test]
+    fn drone_industrial_pro_landed_state_decodes() {
+        let flags = FLAG_BNO_OK | FLAG_BME_OK | FLAG_AHT_OK | FLAG_GPS_FIX;
+        let frame = build_drone_industrial_pro_frame(flags, 3, 1000, false);
+        let parsed = parse_frame(&frame).unwrap();
+
+        let pkt = parse_telemetry_payload(parsed.device_id, parsed.timestamp_ms, &parsed.payload)
+            .unwrap();
+
+        assert_eq!(pkt.state_code, 3);
+        assert_eq!(pkt.flight_phase, 2); // ON_GROUND
+        assert!(pkt.on_ground);
+        assert!(!pkt.outputs_active);
+        assert_eq!(pkt.throttle_us, 1000);
+        assert!(!pkt.armed);
+    }
+
+    #[test]
+    fn drone_industrial_pro_status_event_decodes() {
+        // [armed=1, state_code=2 (FS_DESCENDING)] -> throttle 1480, armed true
+        let (state, throttle, armed) = parse_drone_status_payload(&[1, 2]).unwrap();
+        assert_eq!(state, 2);
+        assert_eq!(throttle, 1480);
+        assert!(armed);
+
+        // [armed=0, state_code=3 (FS_LANDED)] -> throttle 1000, armed false
+        let (state, throttle, armed) = parse_drone_status_payload(&[0, 3]).unwrap();
+        assert_eq!(state, 3);
+        assert_eq!(throttle, 1000);
+        assert!(!armed);
+    }
+
+    #[test]
+    fn drone_downlink_command_packet_format_and_crc() {
+        let arm_pkt = build_drone_command_packet(true);
+        assert_eq!(arm_pkt.len(), 7);
+        assert_eq!(arm_pkt[0], 0xAA);
+        assert_eq!(arm_pkt[1], 0x55);
+        assert_eq!(arm_pkt[2], 0x01); // version
+        assert_eq!(arm_pkt[3], 0xCC); // device id
+        assert_eq!(arm_pkt[4], 0x01); // ARM command
+        let expected_arm_crc = crc16_ccitt(&[0x01, 0xCC, 0x01]);
+        let actual_arm_crc = u16::from_le_bytes([arm_pkt[5], arm_pkt[6]]);
+        assert_eq!(actual_arm_crc, expected_arm_crc);
+
+        let disarm_pkt = build_drone_command_packet(false);
+        assert_eq!(disarm_pkt.len(), 7);
+        assert_eq!(disarm_pkt[0], 0xAA);
+        assert_eq!(disarm_pkt[1], 0x55);
+        assert_eq!(disarm_pkt[2], 0x01);
+        assert_eq!(disarm_pkt[3], 0xCC);
+        assert_eq!(disarm_pkt[4], 0x00); // DISARM command
+        let expected_disarm_crc = crc16_ccitt(&[0x01, 0xCC, 0x00]);
+        let actual_disarm_crc = u16::from_le_bytes([disarm_pkt[5], disarm_pkt[6]]);
+        assert_eq!(actual_disarm_crc, expected_disarm_crc);
     }
 }
 

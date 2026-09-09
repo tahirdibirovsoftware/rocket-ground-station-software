@@ -7,6 +7,7 @@ use crate::mock::generator::{MockGenerator, MockPacket};
 use crate::serial::config::{list_available_ports, PortInfo, SerialPortConfig};
 use crate::serial::reader::{FrameParser, ParsedPacket};
 use crate::logger::csv_writer::CsvLogger;
+use crate::protocol::binary_packet::build_drone_command_packet;
 
 use super::events::*;
 use super::state::*;
@@ -128,16 +129,23 @@ pub async fn set_drone_engine(
                 .as_mut()
                 .ok_or_else(|| "RFD serial writer unavailable".to_string())?;
 
-            let cmd: &[u8] = if enabled { b"ARM_ON\n" } else { b"ARM_OFF\n" };
-            port.write_all(cmd)
-                .map_err(|e| format!("Failed to send drone command: {e}"))?;
+            // Send 7-byte binary downlink command frame for Teensy 4.1 Industrial Pro:
+            // [0xAA, 0x55, 0x01, 0xCC, cmd, crc_lo, crc_hi]
+            let bin_cmd = build_drone_command_packet(enabled);
+            port.write_all(&bin_cmd)
+                .map_err(|e| format!("Failed to send binary drone command: {e}"))?;
+
+            // Also emit newline-terminated ASCII command for backward compatibility with serial consoles
+            let ascii_cmd: &[u8] = if enabled { b"ARM_ON\n" } else { b"ARM_OFF\n" };
+            let _ = port.write_all(ascii_cmd);
+
             port.flush()
                 .map_err(|e| format!("Failed to flush RFD serial: {e}"))?;
             drop(writer);
 
             log::info!(
-                "Sent drone engine command: {}",
-                if enabled { "ARM_ON" } else { "ARM_OFF" }
+                "Sent drone engine command: {} (binary 7-byte + ASCII fallback)",
+                if enabled { "ARM (0x01)" } else { "DISARM (0x00)" }
             );
             Ok(format!(
                 "Drone engine {}",

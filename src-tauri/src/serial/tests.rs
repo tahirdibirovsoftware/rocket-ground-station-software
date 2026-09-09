@@ -474,8 +474,8 @@ fn parse_binary_firmware_drone_status_2_bytes() {
         0x07, 0x00,
         0x78, 0x56, 0x34, 0x12,
         2,
-        1, // output active
-        1, // flight phase 1 (IN_AIR)
+        1, // armed = 1
+        2, // flight state 2 (FS_DESCENDING - active descent)
     ];
     let crc = crc16_ccitt(&frame);
     frame.extend_from_slice(&crc.to_le_bytes());
@@ -488,7 +488,7 @@ fn parse_binary_firmware_drone_status_2_bytes() {
             throttle_us,
             armed,
         } => {
-            assert_eq!(*state_code, 1);
+            assert_eq!(*state_code, 2);
             assert_eq!(*throttle_us, 1480);
             assert!(*armed);
         }

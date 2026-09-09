@@ -22,7 +22,6 @@ const DroneControlLabels = (t: TFunction) => {
       case 2:
         return t("droneControl.stateMotorsOn");
       case 3:
-        return t("droneControl.stateMotorsHold");
       case 4:
         return t("droneControl.stateTouchdown");
       case 1:

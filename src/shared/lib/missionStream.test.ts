@@ -236,5 +236,18 @@ describe("resolveMissionStream", () => {
       expect(result.activeStream).toBe("drone");
       expect(result.missionStage).toBe("touchdown");
     });
+
+    it("detects drone touchdown with Teensy 4.1 Industrial Pro stateCode 3 (FS_LANDED)", () => {
+      const result = resolveMissionStream({
+        streamSource: "auto",
+        rocketCount: 300,
+        payloadCount: 100,
+        droneCount: 150,
+        latestRocket: mockRocketPacket({ flightState: FlightState.SecondaryChute }),
+        droneStatus: { stateCode: 3, throttleUs: 1000, armed: false, flightPhase: 2, outputsActive: false },
+      });
+      expect(result.activeStream).toBe("drone");
+      expect(result.missionStage).toBe("touchdown");
+    });
   });
 });

@@ -113,6 +113,7 @@ export function resolveMissionStream(input: StreamResolutionInput): StreamResolu
     // If drone is transmitting, prioritize drone descent/flight control
     if (droneCount > 0) {
       const isTouchdown =
+        droneStatus?.stateCode === 3 ||
         droneStatus?.stateCode === 4 ||
         droneStatus?.flightPhase === 2;
       return {

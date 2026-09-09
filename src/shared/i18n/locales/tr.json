@@ -107,7 +107,7 @@
     "disarmEngine": "MOTORU PASİF ET",
     "linkOffline": "RFD bağlantısı kapalı — drone'u kontrol etmek için RFD'ye bağlanın veya Simulasyonu başlatın.",
     "mockHint": "Simulasyon modu — komutlar sanal drone'a uygulanır.",
-    "rfdHint": "Komutlar RFD downlink üzerinden gönderilir ('1' = AKTİF, '0' = PASİF)."
+    "rfdHint": "Komutlar RFD downlink üzerinden gönderilir (0x01 = AKTİF, 0x00 = PASİF)."
   },
   "droneTelemetry": {
     "title": "Drone Telemetri",
