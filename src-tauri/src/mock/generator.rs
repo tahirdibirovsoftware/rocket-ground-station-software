@@ -292,8 +292,8 @@ impl MockGenerator {
         } else {
             1
         };
-        let throttle_us = if motors_on { 1650u16 } else { 1000u16 };
-        let esc2_us = if motors_on { 1650u16 } else { 1000u16 };
+        let throttle_us = if motors_on { 1480u16 } else { 1000u16 };
+        let esc2_us = if motors_on { 1480u16 } else { 1000u16 };
         let g_force = 1.0 + vertical_velocity.abs() * 0.01;
         let dpdt = -vertical_velocity * 0.12; // approx hPa/s at low altitude
 

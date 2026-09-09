@@ -126,7 +126,7 @@
     "gForce": "G Kuvveti",
     "fastG": "Hızlı G Filtresi",
     "outputStatus": "Çıkış Durumu",
-    "outputActive": "AKTİF (1650 µs / Slew Rate)",
+    "outputActive": "AKTİF (1480 µs / Slew Rate)",
     "outputInactive": "KAPALI (1000 µs / Rölanti)",
     "dualEscMotors": "Motorlar (ESC1 / ESC2)",
     "esc1": "Motor 1 (ESC1)",

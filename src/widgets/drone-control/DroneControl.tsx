@@ -150,7 +150,7 @@ export const DroneControl = React.memo(function DroneControl() {
               }}
             >
               {latest
-                ? `M1: ${throttleUs || (latest.outputsActive ? 1650 : 1000)} | M2: ${esc2Us || (latest.outputsActive ? 1650 : 1000)} µs`
+                ? `M1: ${throttleUs || (latest.outputsActive ? 1480 : 1000)} | M2: ${esc2Us || (latest.outputsActive ? 1480 : 1000)} µs`
                 : "---"}
             </div>
           </div>

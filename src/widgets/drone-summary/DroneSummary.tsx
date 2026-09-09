@@ -92,7 +92,7 @@ export const DroneSummary = React.memo(function DroneSummary() {
           label={t("droneTelemetry.dualEscMotors", "Motors (ESC1 / ESC2)")}
           value={
             latest
-              ? `M1: ${latest.throttleUs || (latest.outputsActive ? 1650 : 1000)} µs | M2: ${latest.esc2Us || latest.throttleUs || (latest.outputsActive ? 1650 : 1000)} µs`
+              ? `M1: ${latest.throttleUs || (latest.outputsActive ? 1480 : 1000)} µs | M2: ${latest.esc2Us || latest.throttleUs || (latest.outputsActive ? 1480 : 1000)} µs`
               : "---"
           }
         />

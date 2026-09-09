@@ -634,7 +634,7 @@ pub fn parse_drone_status_payload(payload: &[u8]) -> Option<(u8, u16, bool)> {
         let armed = payload[0] == 1;
         let state_code = payload[1];
         let throttle_us = if armed && state_code == 2 {
-            1650
+            1480
         } else {
             1000
         };
@@ -913,10 +913,10 @@ mod tests {
     #[test]
     fn drone_firmware_2_byte_status_decodes() {
         // Updated firmware format: [armed (0/1), flight.state_code() (0..=3)]
-        // Armed (1) during FS_DESCENDING (2) -> throttle 1650
+        // Armed (1) during FS_DESCENDING (2) -> throttle 1480
         assert_eq!(
             parse_drone_status_payload(&[1, 2]),
-            Some((2, 1650, true))
+            Some((2, 1480, true))
         );
         // Armed (1) during FS_LAUNCHED (1) -> throttle 1000 (motors off during ascent)
         assert_eq!(
@@ -1338,10 +1338,10 @@ mod tests {
 
     #[test]
     fn drone_industrial_pro_status_event_decodes() {
-        // [armed=1, state_code=2 (FS_DESCENDING)] -> throttle 1650, armed true
+        // [armed=1, state_code=2 (FS_DESCENDING)] -> throttle 1480, armed true
         let (state, throttle, armed) = parse_drone_status_payload(&[1, 2]).unwrap();
         assert_eq!(state, 2);
-        assert_eq!(throttle, 1650);
+        assert_eq!(throttle, 1480);
         assert!(armed);
 
         // [armed=1, state_code=1 (FS_LAUNCHED)] -> throttle 1000, armed true
